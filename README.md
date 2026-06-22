@@ -33,7 +33,7 @@ Aplicación móvil para el conteo masivo de objetos en tiempo real utilizando vi
 ## 📸 Evidencia
 
 <p align="center">
-  <img src="./object-counter-app/capturas_sprints/sprint1.jpeg" width="250"/>
+  <img src="./object-counter-app/capturas_sprints/sprint2.jpeg" width="250"/>
 </p>
 
 ---

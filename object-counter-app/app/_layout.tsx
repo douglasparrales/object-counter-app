@@ -5,9 +5,9 @@ import { loadYOLOModel } from '../model/loadModel';
 
 export default function RootLayout() {
   useEffect(() => {
-  initDB();
-  loadYOLOModel();
-}, []);
+    initDB();
+    loadYOLOModel();
+  }, []);
 
   return <Stack />;
 }

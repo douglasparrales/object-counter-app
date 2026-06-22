@@ -3,7 +3,7 @@ import { loadTensorflowModel } from 'react-native-fast-tflite';
 export async function loadYOLOModel() {
   try {
     const model = await loadTensorflowModel(
-      require('../assets/yolov8n.tflite'),
+      require('../assets/yolov8n_float16.tflite'),
       []
     );
 

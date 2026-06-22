@@ -152,7 +152,7 @@ node_modules/
 yolovenv/
 
 # model files pesados
+yolov8n_saved_model/
 *.pt
 *.onnx
-yolov8n_saved_model/
 calibration_image_sample*
