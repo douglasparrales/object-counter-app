@@ -141,3 +141,18 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Node
+node_modules/
+
+# Expo
+.expo/
+
+# Python venv
+yolovenv/
+
+# model files pesados
+*.pt
+*.onnx
+yolov8n_saved_model/
+calibration_image_sample*
