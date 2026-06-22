@@ -30,6 +30,23 @@ Aplicación móvil para el conteo masivo de objetos en tiempo real utilizando vi
 
 ---
 
+## ✅ Sprint 2 — Integración de (YOLOv8 + TFLite)
+
+- ✔ Modelo YOLOv8n exportado a formato **TensorFlow Lite (.tflite)**
+- ✔ Modelo integrado dentro del proyecto (`assets/`)
+- ✔ Librería `react-native-fast-tflite` instalada
+- ✔ Configuración de Metro para soportar `.tflite`
+- ✔ Dev Build nativo generado (`expo run:android`)
+- ✔ Configuración de Android SDK completada
+- ✔ Resolución de errores avanzados:
+  - NitroModules
+  - rutas largas en Windows
+  - autolinking nativo
+  - assets no reconocidos
+- ✔ Modelo cargado correctamente en dispositivo real
+
+---
+
 ## 📸 Evidencia
 
 <p align="center">
