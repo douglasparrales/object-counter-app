@@ -4,6 +4,9 @@ Aplicación móvil para el conteo masivo de objetos en tiempo real utilizando vi
 
 ---
 
+## Correr Proyecto:
+npx expo run:android
+
 ## 🚀 Estado del proyecto
 
 ### ✅ Sprint 0 — Configuración inicial
