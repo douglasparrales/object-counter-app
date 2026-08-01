@@ -24,8 +24,6 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ],
       "package": "com.gokudouglas.objectcounterapp"
@@ -37,9 +35,10 @@
       "expo-sqlite",
       "expo-router",
       [
-        "expo-camera",
+        "react-native-vision-camera",
         {
-          "cameraPermission": "La app necesita la cámara para contar objetos."
+          "cameraPermission": "La app necesita la cámara para contar objetos.",
+          "enableFrameProcessors": true
         }
       ]
     ]
