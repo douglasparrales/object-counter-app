@@ -1,5 +1,3 @@
-// hooks/useDetection.ts
-
 import { useState, useCallback, useRef } from 'react';
 import type { Camera } from 'react-native-vision-camera';
 
@@ -9,27 +7,31 @@ export type CountResult = {
   confianza: number;
 };
 
-// ⚠️ Reemplaza por la IP real de tu PC
-const BACKEND_URL = 'http://192.168.1.7:8000/detect';
+export type ObjetoReferencia = {
+  claseYolo: string;
+  nombreUsuario: string;
+  imagenUri: string;
+};
 
-const INTERVAL_MS = 500;
+const BACKEND_URL = 'http://192.168.1.7:8000';
+const INTERVAL_MS = 600;
 
 export function useDetection() {
   const [counts, setCounts] = useState<CountResult[]>([]);
   const [isDetecting, setIsDetecting] = useState(false);
-  const [modelReady] = useState(true);
+  const [objetoReferencia, setObjetoReferencia] =
+    useState<ObjetoReferencia | null>(null);
+  const [identificando, setIdentificando] = useState(false);
+  const [claseDetectada, setClaseDetectada] =
+    useState<string | null>(null);
 
   const cameraRef = useRef<Camera | null>(null);
-  const intervalRef = useRef<any>(null);
+  const intervalRef =
+    useRef<ReturnType<typeof setTimeout> | null>(null);
   const isRunning = useRef(false);
 
-  const analyzePhoto = useCallback(async (uri: string) => {
-    try {
-      console.log('================================');
-      console.log('📤 INICIANDO ENVÍO AL BACKEND');
-      console.log('📷 URI:', uri);
-      console.log('🌐 URL:', BACKEND_URL);
-
+  const enviarFoto = useCallback(
+    async (uri: string, claseFiltro = '') => {
       const formData = new FormData();
 
       formData.append(
@@ -41,100 +43,149 @@ export function useDetection() {
         } as any
       );
 
-      console.log('✅ FormData creado');
+      const url = claseFiltro
+        ? `${BACKEND_URL}/detect?clase_filtro=${claseFiltro}`
+        : `${BACKEND_URL}/detect`;
 
-      const response = await fetch(BACKEND_URL, {
+      console.log(
+        `📤 Detectando (${claseFiltro || 'todos'})`
+      );
+
+      const response = await fetch(url, {
         method: 'POST',
         body: formData,
       });
 
-      console.log('📥 Response recibida');
-      console.log('📥 Status:', response.status);
-      console.log('📥 OK:', response.ok);
+      console.log(
+        `📥 /detect status: ${response.status}`
+      );
 
       if (!response.ok) {
-        const errorText = await response.text();
-
-        console.log('❌ ERROR BACKEND');
-        console.log(errorText);
-
-        return;
+        throw new Error(`Error ${response.status}`);
       }
 
-      const data = await response.json();
+      return await response.json();
+    },
+    []
+  );
 
-      console.log('✅ JSON recibido');
-      //console.log(JSON.stringify(data, null, 2));
+  const identificarFoto = useCallback(
+    async (uri: string) => {
+      setIdentificando(true);
 
-      if (data?.detecciones) {
-        console.log(
-          `🎯 Objetos detectados: ${data.detecciones.length}`
+      try {
+        console.log('📸 Identificando objeto...');
+
+        const formData = new FormData();
+
+        formData.append(
+          'file',
+          {
+            uri,
+            type: 'image/jpeg',
+            name: 'photo.jpg',
+          } as any
         );
+
+        const response = await fetch(
+          `${BACKEND_URL}/identify`,
+          {
+            method: 'POST',
+            body: formData,
+          }
+        );
+
+        console.log(
+          `📥 /identify status: ${response.status}`
+        );
+
+        const data = await response.json();
+
+        if (data.clase) {
+          console.log(
+            `✅ Detectado: ${data.clase}`
+          );
+
+          setClaseDetectada(data.clase);
+          return data.clase;
+        }
+
+        console.log('⚠️ No se detectó ningún objeto');
+        return null;
+      } catch (err: any) {
+        console.log(
+          '❌ Error identificando:',
+          err?.message ?? err
+        );
+        return null;
+      } finally {
+        setIdentificando(false);
       }
+    },
+    []
+  );
 
-      setCounts(data.detecciones ?? []);
+  const confirmarObjeto = useCallback(
+    (
+      claseYolo: string,
+      nombreUsuario: string,
+      imagenUri: string
+    ) => {
+      console.log(
+        `✅ Referencia guardada: ${nombreUsuario} (${claseYolo})`
+      );
 
-      console.log('✅ Estado actualizado');
-      console.log('================================');
-    } catch (err: any) {
-      console.log('================================');
-      console.log('❌ ERROR EN FETCH');
-      console.log(err);
-      console.log('Mensaje:', err?.message);
-      console.log('================================');
-    }
-  }, []);
+      setObjetoReferencia({
+        claseYolo,
+        nombreUsuario,
+        imagenUri,
+      });
+
+      setClaseDetectada(null);
+    },
+    []
+  );
 
   const startDetection = useCallback(
     (camRef: React.RefObject<Camera | null>) => {
-      console.log('================================');
-      console.log('🚀 START DETECTION');
-      console.log('================================');
+      console.log('🚀 Iniciando conteo');
 
       cameraRef.current = camRef.current;
-
-      if (!cameraRef.current) {
-        console.log('❌ cameraRef.current es NULL');
-        return;
-      }
-
-      console.log('✅ Cámara encontrada');
-
       isRunning.current = true;
 
       setIsDetecting(true);
       setCounts([]);
 
       const tick = async () => {
-        console.log('⏱ TICK');
-
-        if (!isRunning.current) {
-          console.log('⛔ Detección detenida');
-          return;
-        }
-
-        if (!cameraRef.current) {
-          console.log('❌ Cámara perdida');
+        if (!isRunning.current || !cameraRef.current) {
           return;
         }
 
         try {
-          console.log('📸 Tomando foto...');
-
           const photo = await cameraRef.current.takePhoto();
 
-          console.log('✅ Foto capturada');
-          console.log('📂 Path:', photo.path);
+          const uri = `file://${photo.path}`;
 
-          const imageUri = `file://${photo.path}`;
+          const claseFiltro =
+            objetoReferencia?.claseYolo ?? '';
 
-          console.log('📷 URI generada:', imageUri);
+          const data = await enviarFoto(
+            uri,
+            claseFiltro
+          );
 
-          await analyzePhoto(imageUri);
+          setCounts(data.detecciones);
+
+          console.log(
+            `✅ Resultados recibidos: ${
+              data.detecciones?.length ?? 0
+            }`
+          );
         } catch (err: any) {
-          console.log('❌ ERROR CAPTURANDO FOTO');
-          console.log(err);
-          console.log('Mensaje:', err?.message);
+          console.log(
+            '❌ Error en tick:',
+            err?.message ?? err
+          );
         }
 
         if (isRunning.current) {
@@ -147,13 +198,11 @@ export function useDetection() {
 
       tick();
     },
-    [analyzePhoto]
+    [enviarFoto, objetoReferencia]
   );
 
   const stopDetection = useCallback(() => {
-    console.log('================================');
-    console.log('🛑 STOP DETECTION');
-    console.log('================================');
+    console.log('🛑 Conteo detenido');
 
     isRunning.current = false;
     setIsDetecting(false);
@@ -161,15 +210,28 @@ export function useDetection() {
     if (intervalRef.current) {
       clearTimeout(intervalRef.current);
       intervalRef.current = null;
-      console.log('✅ Timer eliminado');
     }
+  }, []);
+
+  const limpiarReferencia = useCallback(() => {
+    console.log('🧹 Referencia eliminada');
+
+    setObjetoReferencia(null);
+    setCounts([]);
+    setClaseDetectada(null);
   }, []);
 
   return {
     counts,
     isDetecting,
-    modelReady,
+    modelReady: true,
+    objetoReferencia,
+    identificando,
+    claseDetectada,
+    identificarFoto,
+    confirmarObjeto,
     startDetection,
     stopDetection,
+    limpiarReferencia,
   };
 }
