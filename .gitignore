@@ -150,6 +150,9 @@ node_modules/
 
 # Python venv
 yolovenv/
+backend/.venv/
+backend/__pycache__
+*.pyc
 
 # model files pesados
 yolov8n_saved_model/
