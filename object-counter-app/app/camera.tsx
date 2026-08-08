@@ -5,39 +5,60 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
-import { useDetection, Deteccion } from '../hooks/useDetection';
+import {
+  useDetection,
+  CajaGuardada,
+} from '../hooks/useDetection';
+import ARView from '../components/ARView';
 
-// Componente que dibuja UN bounding box sobre la cámara
+// Componente que dibuja UN bounding box sobre la cámara (Detección 2D)
 function BoundingBox({
-  det, screenW, screenH,
+  caja,
+  screenW,
+  screenH,
 }: {
-  det: Deteccion;
+  caja: CajaGuardada;
   screenW: number;
   screenH: number;
 }) {
-  const boxW = det.w * screenW;
-  const boxH = det.h * screenH;
-  const left = (det.cx - det.w / 2) * screenW;
-  const top  = (det.cy - det.h / 2) * screenH;
-
-  // Verde = ya estaba contado, Blanco = recién contado en este frame
-  const color = det.ya_contado ? '#4ADE80' : '#FFFFFF';
+  const boxW = caja.w * screenW;
+  const boxH = caja.h * screenH;
+  const left = (caja.cx - caja.w / 2) * screenW;
+  const top  = (caja.cy - caja.h / 2) * screenH;
 
   return (
-    <View style={{
-      position: 'absolute', left, top,
-      width: boxW, height: boxH,
-      borderWidth: 2, borderColor: color, borderRadius: 4,
-    }}>
-      {/* ID del objeto en esquina superior izquierda */}
-      <View style={{
-        position: 'absolute', top: -20, left: 0,
-        backgroundColor: color,
-        paddingHorizontal: 5, paddingVertical: 1, borderRadius: 3,
-        flexDirection: 'row', gap: 4,
-      }}>
-        <Text style={{ color: '#111', fontSize: 10, fontWeight: '700' }}>
-          #{det.track_id} {det.clase}
+    <View
+      style={{
+        position: 'absolute',
+        left,
+        top,
+        width: boxW,
+        height: boxH,
+        borderWidth: 2.5,
+        borderColor: '#4ADE80',
+        borderRadius: 6,
+        backgroundColor: 'rgba(74, 222, 128, 0.12)',
+      }}
+    >
+      <View
+        style={{
+          position: 'absolute',
+          top: -22,
+          left: -2,
+          backgroundColor: '#4ADE80',
+          paddingHorizontal: 6,
+          paddingVertical: 2,
+          borderRadius: 4,
+        }}
+      >
+        <Text
+          style={{
+            color: '#111',
+            fontSize: 11,
+            fontWeight: '800',
+          }}
+        >
+          #{caja.id} {caja.clase}
         </Text>
       </View>
     </View>
@@ -59,10 +80,16 @@ export default function CameraScreen() {
   const [capturando, setCapturando]         = useState(false);
 
   const {
-    totalContado, deteccionesActuales, isDetecting,
-    objetoReferencia, identificando, claseDetectada,
-    identificarFoto, confirmarObjeto,
-    startDetection, stopDetection, limpiarReferencia,
+    totalContado,
+    cajasGuardadas,
+    isDetecting,
+    objetoReferencia,
+    identificando,
+    confirmarObjeto,
+    identificarFoto,
+    startDetection,
+    stopDetection,
+    limpiarReferencia,
   } = useDetection();
 
   const abrirModalReferencia = () => {
@@ -114,25 +141,38 @@ export default function CameraScreen() {
     );
   }
 
+  // 🚀 MODO AR: Si el usuario inició el conteo (isDetecting == true), renderizamos el componente 3D ARView
+  if (isDetecting) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        <ARView
+          objetoReferencia={objetoReferencia}
+          onDetener={stopDetection}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Camera
         ref={cameraRef}
         style={styles.camera}
         device={device}
-        isActive={!modalVisible}
+        isActive={!modalVisible && !isDetecting}
         photo={true}
       />
 
-      {/* Bounding boxes sobre la cámara */}
-      {isDetecting && deteccionesActuales.map((det, i) => (
-        <BoundingBox
-          key={`${det.clase}-${i}`}
-          det={det}
-          screenW={screenW}
-          screenH={screenH}
-        />
-      ))}
+      {/* Bounding boxes de Cajas Persistentes sobre la cámara */}
+      {isDetecting &&
+        cajasGuardadas.map((caja) => (
+          <BoundingBox
+            key={`caja-${caja.id}`}
+            caja={caja}
+            screenW={screenW}
+            screenH={screenH}
+          />
+        ))}
 
       {/* Preview objeto de referencia */}
       {objetoReferencia && (
@@ -154,23 +194,6 @@ export default function CameraScreen() {
             {objetoReferencia?.nombreUsuario ?? 'Objetos'}
           </Text>
           <Text style={styles.totalNum}>{totalContado}</Text>
-          <Text style={styles.totalSub}>
-            viendo: {deteccionesActuales.length}
-          </Text>
-        </View>
-      )}
-
-      {/* Leyenda de colores */}
-      {isDetecting && (
-        <View style={styles.legend}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#fff' }]} />
-            <Text style={styles.legendText}>Detectado</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#4ADE80' }]} />
-            <Text style={styles.legendText}>Ya contado</Text>
-          </View>
         </View>
       )}
 
@@ -195,8 +218,9 @@ export default function CameraScreen() {
         )}
 
         <Pressable
-          style={[styles.captureBtn, isDetecting && styles.captureBtnActive]}
+          style={[styles.captureBtn, isDetecting && styles.captureBtnActive, !objetoReferencia && styles.disabledBtn]}
           onPress={isDetecting ? stopDetection : () => startDetection(cameraRef)}
+          disabled={!objetoReferencia && !isDetecting}
         >
           <Text style={styles.captureText}>
             {isDetecting ? 'Detener' : 'Contar'}
@@ -280,15 +304,15 @@ const styles = StyleSheet.create({
   container:        { flex: 1, backgroundColor: '#000' },
   camera:           { flex: 1 },
   centered:         { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
-  message:          { fontSize: 16, textAlign: 'center', color: '#333' },
+  message:          { fontSize: 16, textAlign: 'center', color: '#fff' },
 
   referenceBox: {
-    position: 'absolute', top: 16, right: 16,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    position: 'absolute', top: 50, right: 16,
+    backgroundColor: 'rgba(0,0,0,0.85)',
     borderRadius: 12, padding: 8, alignItems: 'center',
     borderWidth: 1.5, borderColor: '#4ADE80', maxWidth: 100,
   },
-  referenceImage:   { width: 72, height: 72, borderRadius: 8, marginBottom: 4 },
+  referenceImage:   { width: 64, height: 64, borderRadius: 8, marginBottom: 4 },
   referenceText:    { color: '#4ADE80', fontSize: 11, fontWeight: '600', textAlign: 'center' },
   clearBtn: {
     position: 'absolute', top: 4, right: 4,
@@ -299,22 +323,13 @@ const styles = StyleSheet.create({
   clearBtnText:     { color: '#fff', fontSize: 10 },
 
   totalBadge: {
-    position: 'absolute', top: 60, left: 16,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    position: 'absolute', top: 50, left: 16,
+    backgroundColor: 'rgba(0,0,0,0.85)',
     borderRadius: 16, paddingHorizontal: 20, paddingVertical: 12,
-    borderWidth: 2, borderColor: '#4ADE80', alignItems: 'center',
+    borderWidth: 1.5, borderColor: '#4ADE80', alignItems: 'center',
   },
   totalLabel:       { color: '#aaa', fontSize: 11, marginBottom: 2 },
-  totalNum:         { color: '#4ADE80', fontSize: 52, fontWeight: '800', lineHeight: 56 },
-  totalSub:         { color: '#888', fontSize: 11, marginTop: 2 },
-
-  legend: {
-    position: 'absolute', bottom: 160, left: 16,
-    gap: 6,
-  },
-  legendItem:       { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendDot:        { width: 10, height: 10, borderRadius: 5 },
-  legendText:       { color: '#fff', fontSize: 11 },
+  totalNum:         { color: '#4ADE80', fontSize: 42, fontWeight: '800', lineHeight: 46 },
 
   controls: {
     position: 'absolute', bottom: 50, left: 0, right: 0,
@@ -335,10 +350,11 @@ const styles = StyleSheet.create({
   refBtnText:       { color: '#fff', fontSize: 12 },
   captureBtn: {
     width: 76, height: 76, borderRadius: 38,
-    backgroundColor: '#fff',
+    backgroundColor: '#4ADE80',
     justifyContent: 'center', alignItems: 'center',
   },
   captureBtnActive: { backgroundColor: '#EF4444' },
+  disabledBtn:      { backgroundColor: '#444' },
   captureText:      { fontWeight: '700', color: '#111', fontSize: 13 },
   btn: {
     backgroundColor: '#185FA5', borderRadius: 10,
