@@ -9,6 +9,15 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@babel/plugin-proposal-class-properties": "^7.18.6",
+    "@babel/plugin-proposal-export-namespace-from": "^7.18.9",
+    "@babel/plugin-proposal-logical-assignment-operators": "^7.20.7",
+    "@babel/plugin-proposal-numeric-separator": "^7.18.6",
+    "@babel/plugin-proposal-object-rest-spread": "^7.20.7",
+    "@babel/plugin-proposal-optional-catch-binding": "^7.18.6",
+    "@babel/plugin-proposal-private-methods": "^7.18.6",
+    "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
+    "@reactvision/react-viro": "^2.56.0",
     "drizzle-orm": "^0.45.2",
     "expo": "~54.0.34",
     "expo-camera": "~17.0.10",
@@ -30,11 +39,14 @@
   "devDependencies": {
     "@babel/plugin-proposal-nullish-coalescing-operator": "^7.18.6",
     "@babel/plugin-proposal-optional-chaining": "^7.21.0",
-    "@babel/plugin-transform-template-literals": "^8.0.1",
     "@types/react": "~19.1.0",
     "babel-preset-expo": "^54.0.11",
     "drizzle-kit": "^0.31.10",
     "typescript": "~5.9.2"
+  },
+  "overrides": {
+    "react": "$react",
+    "react-dom": "$react-dom"
   },
   "private": true
 }

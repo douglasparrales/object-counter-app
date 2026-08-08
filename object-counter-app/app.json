@@ -35,6 +35,14 @@
       "expo-sqlite",
       "expo-router",
       [
+        "@reactvision/react-viro",
+        {
+          "android": {
+            "x86": true
+          }
+        }
+      ],
+      [
         "react-native-vision-camera",
         {
           "cameraPermission": "La app necesita la cámara para contar objetos.",
