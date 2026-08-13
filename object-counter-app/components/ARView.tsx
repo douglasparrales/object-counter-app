@@ -29,6 +29,7 @@ function EscenaAR(props?: any) {
   const DISTANCIA_MINIMA = 0.05; // 5 cm
 
   useEffect(() => {
+    console.log('[AR] Escena Viro creada. Esperando inicialización de ARCore.');
     try {
       ViroMaterials.createMaterials({
         marcadorVerde: {
@@ -115,6 +116,11 @@ export default function ARView({
 }) {
   const [objetosAnclados, setObjetosAnclados] = useState<Objeto3DAnclado[]>([]);
 
+  useEffect(() => {
+    console.log('[AR] ARView montado. Viro intentará iniciar ARCore.');
+    return () => console.log('[AR] ARView desmontado.');
+  }, []);
+
   const agregarAncla3D = (x: number, y: number, z: number) => {
     setObjetosAnclados((prev) => {
       const nuevoId = prev.length + 1;
@@ -125,6 +131,7 @@ export default function ARView({
         y,
         z,
       };
+      console.log(`[AR] Ancla creada: #${nuevoId} en (${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)})`);
       return [...prev, nuevoObj];
     });
   };

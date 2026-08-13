@@ -67,7 +67,9 @@ La app solicita permiso de cámara. Acéptalo en el teléfono.
 1. Pulsa **Qué contar** y toma una foto de referencia.
 2. Escribe el nombre del objeto y confirma.
 3. La app envía la foto a `POST /identify` para validar la etiqueta.
-4. Pulsa **Contar** para iniciar la cámara y el tracking. Cada objeto confirmado recibe una caja verde y un ID (`#1`, `#2`, etc.). El total sólo aumenta para IDs nuevos.
+4. Pulsa **Contar** y elige un modo:
+   - **Tiempo real**: para objetos separados y visibles en cámara. Cada objeto recibe una caja verde y un ID.
+   - **Foto masiva**: para muchos objetos pequeños o juntos (tornillos, caramelos, bolichas). Toma una foto de alta calidad y la analiza a mayor resolución.
 5. Al detener, revisa el total, escribe opcionalmente el lugar (por ejemplo, `Lab 1`) y pulsa **Guardar** sólo si deseas conservar el reporte.
 6. Desliza la pantalla de cámara hacia la izquierda para ver los reportes guardados.
 
@@ -85,7 +87,11 @@ Por ejemplo, `esfero` se normaliza a `ballpoint pen` y `pen`, porque traducirlo 
 
 ## Tracking y límites conocidos
 
-El conteo actual usa VisionCamera para capturar frames, YOLO-World para localizar candidatos por nombre y una comparación visual entre cada caja y la foto de referencia. El backend descarta cajas con una apariencia distinta y elimina cajas solapadas antes de enviarlas al móvil. Sólo se muestran y cuentan las detecciones que se mantienen estables durante tres frames. El total es el conjunto de objetos visibles y confirmados en la escena, no una suma de apariciones sucesivas; así se evita que un mismo objeto pase de 3 a 5 por variaciones de su caja.
+El conteo actual usa VisionCamera para capturar frames, YOLO-World para localizar candidatos por nombre y una comparación visual entre cada caja y la foto de referencia. El backend descarta cajas con una apariencia distinta y elimina cajas solapadas antes de enviarlas al móvil. En tiempo real sólo se muestran cajas vistas en el frame reciente, para que una posición anterior no se sume a la actual cuando la cámara se mueve.
+
+## Icono y desarrollo Android
+
+El icono ya está configurado en `app.json`. Si el teléfono sigue mostrando el icono por defecto de React Native, corresponde al binario Android ya instalado: desinstala esa app del dispositivo y vuelve a generar/instalar el desarrollo con `npx expo run:android`. Los cambios de icono no se aplican sólo recargando Metro.
 
 Para contar con precisión, mantén todos los objetos a contar visibles y la cámara relativamente estable hasta que el total se estabilice. Si se necesita recorrer un espacio moviendo la cámara y conservar identidad tras perder de vista objetos, hace falta una integración AR real o comparación visual por embeddings; no se puede prometer esa garantía sólo con cajas 2D.
 

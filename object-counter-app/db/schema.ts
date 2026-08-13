@@ -8,6 +8,10 @@ export const sesiones = sqliteTable('sesiones', {
   imagenUri: text('imagen_uri'),
   notas: text('notas'),
   totalObjetos: integer('total_objetos').default(0),
+  estado: text('estado').notNull().default('guardado'),
+  nombreObjeto: text('nombre_objeto').notNull().default(''),
+  claseYolo: text('clase_yolo').notNull().default(''),
+  ubicacion: text('ubicacion').notNull().default(''),
 });
 
 export const resultados = sqliteTable('resultados', {
@@ -25,4 +29,14 @@ export const categoriasPersonalizadas = sqliteTable('categorias_personalizadas',
   etiqueta: text('etiqueta').notNull(),
   imagenReferenciaUri: text('imagen_referencia_uri'),
   fechaCreacion: text('fecha_creacion').notNull(),
+});
+
+export const auditoriaSesiones = sqliteTable('auditoria_sesiones', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  sesionId: integer('sesion_id')
+    .notNull()
+    .references(() => sesiones.id, { onDelete: 'cascade' }),
+  evento: text('evento').notNull(),
+  detalle: text('detalle'),
+  fecha: text('fecha').notNull(),
 });

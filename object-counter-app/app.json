@@ -3,6 +3,7 @@
     "name": "object-counter-app",
     "slug": "object-counter-app",
     "version": "1.0.0",
+    "scheme": "objectcounter",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
