@@ -64,14 +64,18 @@ La app solicita permiso de cámara. Acéptalo en el teléfono.
 
 ## Uso
 
-1. Pulsa **Qué contar** y toma una foto de referencia.
-2. Escribe el nombre del objeto y confirma.
-3. La app envía la foto a `POST /identify` para validar la etiqueta.
+1. En el inicio, pulsa **Contar desde una foto** para el flujo directo: tomar foto → analizar → ver el total y las clases detectadas. No requiere referencia ni nombre.
+2. Para un objeto específico, entra a **Conteo en tiempo real**, pulsa **Qué contar**, toma una foto de referencia y escribe su nombre.
+3. La app envía la referencia a `POST /identify` para validarla.
 4. Pulsa **Contar** y elige un modo:
    - **Tiempo real**: para objetos separados y visibles en cámara. Cada objeto recibe una caja verde y un ID.
    - **Foto masiva**: para muchos objetos pequeños o juntos (tornillos, caramelos, bolichas). Toma una foto de alta calidad y la analiza a mayor resolución.
 5. Al detener, revisa el total, escribe opcionalmente el lugar (por ejemplo, `Lab 1`) y pulsa **Guardar** sólo si deseas conservar el reporte.
 6. Desliza la pantalla de cámara hacia la izquierda para ver los reportes guardados.
+
+El menú lateral (ícono de tres líneas) también permite acceder a Reportes, Acerca de y la versión de la app.
+
+La foto directa reconoce primero las clases comunes de YOLO (COCO) y, si no encuentra ninguna, intenta categorías de objetos pequeños como bolígrafo, tornillo, caramelo, bolicha, moneda y llave. Para un tipo de objeto que no esté en esas categorías, usa el flujo con foto de referencia y nombre.
 
 ## Logs para diagnosticar
 

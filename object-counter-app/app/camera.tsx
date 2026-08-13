@@ -7,6 +7,7 @@ import {
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import { useRouter } from 'expo-router';
 import { guardarReporte, persistirImagenReferencia } from '../db/client';
+import AppMenu from '../components/AppMenu';
 import {
   useDetection,
   CajaGuardada,
@@ -250,6 +251,8 @@ export default function CameraScreen() {
         photo={true}
       />
 
+      {!modalVisible && <View style={styles.menuButton}><AppMenu /></View>}
+
       {isDetecting &&
         cajasGuardadas.map((caja) => (
           <BoundingBox key={`caja-${caja.id}`} caja={caja} screenW={screenW} screenH={screenH} />
@@ -310,7 +313,7 @@ export default function CameraScreen() {
 
       {resultadoFinal !== null && (
         <View style={styles.historyHint}>
-          <Text style={styles.historyHintText}>Reportes: toca “Reportes →” o desliza hacia la izquierda</Text>
+          <Text style={styles.historyHintText}>Desliza hacia la izquierda para ver los reportes</Text>
         </View>
       )}
 
@@ -439,6 +442,7 @@ export default function CameraScreen() {
 const styles = StyleSheet.create({
   container:        { flex: 1, backgroundColor: '#000' },
   camera:           { flex: 1 },
+  menuButton: { position: 'absolute', top: 42, left: 10, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 22 },
   centered:         { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   message:          { fontSize: 16, textAlign: 'center', color: '#fff' },
   referenceBox: {

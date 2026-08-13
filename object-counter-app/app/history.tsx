@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { FlatList, Image, PanResponder, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { listarReportes, ReporteGuardado } from '../db/client';
+import AppMenu from '../components/AppMenu';
 
 export default function HistoryScreen() {
   const router = useRouter();
@@ -23,6 +24,7 @@ export default function HistoryScreen() {
         <TouchableOpacity onPress={() => router.back()}><Text style={styles.back}>‹ Cámara</Text></TouchableOpacity>
         <Text style={styles.title}>Reportes</Text>
         <Text style={styles.swipeHint}>También puedes deslizar hacia la derecha para volver.</Text>
+        <View style={styles.menu}><AppMenu /></View>
       </View>
       <FlatList
         data={reportes}
@@ -50,6 +52,7 @@ const styles = StyleSheet.create({
   back: { color: '#4ADE80', fontSize: 16, marginBottom: 12 },
   title: { color: '#fff', fontSize: 28, fontWeight: '800' },
   swipeHint: { color: '#9da7b2', fontSize: 12, marginTop: 6 },
+  menu: { position: 'absolute', top: 52, right: 10 },
   list: { padding: 16, gap: 12 },
   empty: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   emptyText: { color: '#9da7b2', textAlign: 'center', fontSize: 16 },

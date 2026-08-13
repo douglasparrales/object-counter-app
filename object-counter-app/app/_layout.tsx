@@ -7,5 +7,5 @@ export default function RootLayout() {
     initDB();
   }, []);
 
-  return <Stack />;
+  return <Stack screenOptions={{ headerShown: false }} />;
 }

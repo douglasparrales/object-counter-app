@@ -1,6 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from ultralytics import YOLOWorld
+from ultralytics import YOLO, YOLOWorld
 from deep_translator import GoogleTranslator
 import io
 import time
@@ -27,6 +27,7 @@ print("🚀 [INICIO] Cargando modelo YOLO-World v2...")
 try:
     # El checkpoint v2 ya está incluido en backend y entiende mejor prompts abiertos.
     model = YOLOWorld("yolov8s-worldv2.pt")
+    model_general = YOLO("yolov8n.pt")
     print("✅ [INICIO] Modelo YOLO-World cargado con éxito.")
 except Exception as e:
     print(f"💥 [ERROR CRÍTICO] Falló la carga del modelo YOLO-World: {e}")
@@ -51,6 +52,12 @@ ALIASES_YOLO = {
     "pluma": ["pen"],
     "marcador": ["marker pen", "marker"],
 }
+
+# Categorías adicionales para la foto directa cuando COCO no detecta nada.
+CATEGORIAS_FOTO_DIRECTA = [
+    "pen", "pencil", "screw", "bolt", "nut", "coin", "candy", "marble",
+    "ball", "bottle", "cup", "book", "key", "phone", "scissors", "fruit",
+]
 
 
 def normalizar(texto: str) -> str:
@@ -313,3 +320,51 @@ async def detect(
     print(f"🔍 [/detect RESULTADO] Filtro: '{clase}' | Objetos: {len(objetos)} | Tiempo: {duracion}s")
 
     return {"objetos": objetos}
+
+
+@app.post("/count-image")
+async def count_image(file: UploadFile = File(...)):
+    """Conteo directo de una sola foto, sin referencia ni nombre previo.
+
+    Usa YOLOv8 COCO para identificar clases comunes y devuelve el total más un
+    desglose. Es el modo indicado para una escena fija con muchos objetos.
+    """
+    t0 = time.time()
+    try:
+        image = Image.open(io.BytesIO(await file.read())).convert("RGB")
+    except Exception as e:
+        print(f"[count-image ERROR] Imagen inválida: {e}")
+        raise HTTPException(status_code=400, detail="No se pudo leer la imagen enviada.")
+
+    try:
+        with model_lock:
+            print("[count-image] Analizando foto estática a resolución alta...")
+            results = model_general(image, conf=0.20, imgsz=960, verbose=False)
+        if not any(len(result.boxes) for result in results):
+            print("[count-image] Sin clases COCO; probando categorías de objetos pequeños...")
+            results = ejecutar_inferencia(image, CATEGORIAS_FOTO_DIRECTA, confianza=0.10, imgsz=960)
+    except Exception as e:
+        print(f"[count-image ERROR] Inferencia: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="No se pudo contar la imagen.")
+
+    ancho, alto = image.size
+    objetos = []
+    resumen: dict[str, int] = {}
+    for result in results:
+        for box in result.boxes:
+            confianza = float(box.conf[0])
+            x1, y1, x2, y2 = [float(valor) for valor in box.xyxy[0]]
+            clase = result.names[int(box.cls[0])]
+            resumen[clase] = resumen.get(clase, 0) + 1
+            objetos.append({
+                "clase": clase,
+                "confianza": round(confianza, 3),
+                "cx": round(((x1 + x2) / 2) / ancho, 4),
+                "cy": round(((y1 + y2) / 2) / alto, 4),
+                "w": round((x2 - x1) / ancho, 4),
+                "h": round((y2 - y1) / alto, 4),
+            })
+
+    print(f"[count-image RESULTADO] Total: {len(objetos)} | Clases: {resumen} | Tiempo: {round(time.time() - t0, 3)}s")
+    return {"total": len(objetos), "resumen": resumen, "objetos": objetos}
