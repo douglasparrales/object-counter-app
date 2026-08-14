@@ -21,9 +21,9 @@ export default function HistoryScreen() {
   return (
     <View style={styles.container} {...gestoVolver.panHandlers}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}><Text style={styles.back}>‹ Cámara</Text></TouchableOpacity>
         <Text style={styles.title}>Reportes</Text>
         <Text style={styles.swipeHint}>También puedes deslizar hacia la derecha para volver.</Text>
+        <TouchableOpacity style={styles.back} onPress={() => router.back()}><Text style={styles.backText}>‹</Text></TouchableOpacity>
         <View style={styles.menu}><AppMenu /></View>
       </View>
       <FlatList
@@ -36,7 +36,8 @@ export default function HistoryScreen() {
             {item.imagenUri ? <Image source={{ uri: item.imagenUri }} style={styles.image} /> : <View style={styles.placeholder} />}
             <View style={styles.info}>
               <Text style={styles.object}>{item.nombreObjeto || item.claseYolo}</Text>
-              <Text style={styles.detail}>{item.ubicacion || 'Sin ubicación'} · {new Date(item.fechaInicio).toLocaleString()}</Text>
+              <Text style={styles.detail}>{item.ubicacion || 'Sin ubicación'} · {item.modoConteo === 'foto_estatica' ? 'Foto estática' : 'Tiempo real'}</Text>
+              <Text style={styles.detail}>{new Date(item.fechaInicio).toLocaleString()}</Text>
               <Text style={styles.total}>{item.totalObjetos} objetos</Text>
             </View>
           </View>
@@ -49,10 +50,11 @@ export default function HistoryScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#10151c' },
   header: { paddingTop: 58, paddingHorizontal: 20, paddingBottom: 18, borderBottomWidth: 1, borderColor: '#27303a' },
-  back: { color: '#4ADE80', fontSize: 16, marginBottom: 12 },
-  title: { color: '#fff', fontSize: 28, fontWeight: '800' },
+  back: { position: 'absolute', top: 56, right: 10, width: 38, height: 38, borderRadius: 19, backgroundColor: '#202934', justifyContent: 'center', alignItems: 'center' },
+  backText: { color: '#fff', fontSize: 34, lineHeight: 34 },
+  title: { color: '#fff', fontSize: 28, fontWeight: '800', marginTop: 36 },
   swipeHint: { color: '#9da7b2', fontSize: 12, marginTop: 6 },
-  menu: { position: 'absolute', top: 52, right: 10 },
+  menu: { position: 'absolute', top: 52, left: 10 },
   list: { padding: 16, gap: 12 },
   empty: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   emptyText: { color: '#9da7b2', textAlign: 'center', fontSize: 16 },

@@ -73,7 +73,7 @@ def obtener_candidatos(prompt: str) -> tuple[str, list[str]]:
 
     # YOLO-World está entrenado principalmente con etiquetas en inglés; no se
     # envía el término en español porque suele reducir la precisión.
-    if traduccion and traduccion not in candidatos:
+    if traduccion and traduccion not in candidatos and (traduccion != prompt_normalizado or not candidatos):
         candidatos.append(traduccion)
 
     if not candidatos:
@@ -266,7 +266,7 @@ async def detect(
         # Una foto masiva conserva más detalle para objetos pequeños; el modo
         # tiempo real sigue siendo más rápido para la cámara en vivo.
         imgsz = 960 if modo == "foto_masiva" else 640
-        results = ejecutar_inferencia(image, candidatos, confianza=0.12, imgsz=imgsz)
+        results = ejecutar_inferencia(image, candidatos, confianza=0.06, imgsz=imgsz)
     except Exception as e:
         print(f"❌ [/detect ERROR] Fallo en la inferencia del loop: {e}")
         return {"objetos": []}
@@ -286,7 +286,9 @@ async def detect(
             clase_nombre = result.names[int(box.cls[0])]
 
             similitud = similitud_visual(referencia, recortar_imagen(image, (x1, y1, x2, y2))) if referencia else None
-            if similitud is not None and similitud < 0.42:
+            # La foto de referencia suele incluir fondo y cambia de iluminación
+            # frente al frame. Sólo descartamos diferencias muy marcadas.
+            if similitud is not None and similitud < 0.25:
                 print(f"[REFERENCIA] Caja descartada por similitud baja: {similitud}")
                 continue
 
@@ -339,7 +341,9 @@ async def count_image(file: UploadFile = File(...)):
     try:
         with model_lock:
             print("[count-image] Analizando foto estática a resolución alta...")
-            results = model_general(image, conf=0.20, imgsz=960, verbose=False)
+            # Foto directa: prioriza precisión. Cajas COCO débiles como un
+            # "refrigerator" gigante suelen ser falsos positivos de fondo.
+            results = model_general(image, conf=0.40, imgsz=960, verbose=False)
         if not any(len(result.boxes) for result in results):
             print("[count-image] Sin clases COCO; probando categorías de objetos pequeños...")
             results = ejecutar_inferencia(image, CATEGORIAS_FOTO_DIRECTA, confianza=0.10, imgsz=960)

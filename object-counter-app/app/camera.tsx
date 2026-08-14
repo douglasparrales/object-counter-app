@@ -8,6 +8,7 @@ import { Camera, useCameraDevice, useCameraPermission } from 'react-native-visio
 import { useRouter } from 'expo-router';
 import { guardarReporte, persistirImagenReferencia } from '../db/client';
 import AppMenu from '../components/AppMenu';
+import SaveReportModal from '../components/SaveReportModal';
 import {
   useDetection,
   CajaGuardada,
@@ -72,7 +73,9 @@ export default function CameraScreen() {
   const cameraRef               = useRef<Camera>(null);
   const modalCameraRef          = useRef<Camera>(null);
 
-  const [modalVisible, setModalVisible]     = useState(false);
+  // El flujo de tiempo real empieza con la foto de referencia. La cámara que
+  // detecta en vivo no se monta hasta cerrar este paso.
+  const [modalVisible, setModalVisible]     = useState(true);
   const [etapa, setEtapa]                   = useState<EtapaModal>('camara');
   const [fotoCapturada, setFotoCapturada]   = useState<string | null>(null);
   const [nombreUsuario, setNombreUsuario]   = useState('');
@@ -81,9 +84,7 @@ export default function CameraScreen() {
   const [referenciaIdLocal, setReferenciaIdLocal] = useState<string | null>(null);
   const [capturando, setCapturando]         = useState(false);
   const [resultadoFinal, setResultadoFinal] = useState<number | null>(null);
-  const [ubicacion, setUbicacion]           = useState('');
-  const [guardando, setGuardando]           = useState(false);
-  const [guardado, setGuardado]             = useState(false);
+  const [reporteGuardado, setReporteGuardado] = useState(false);
 
   const {
     totalContado,
@@ -94,7 +95,6 @@ export default function CameraScreen() {
     confirmarObjeto,
     identificarFoto,
     startDetection,
-    contarFotoMasiva,
     stopDetection,
     limpiarReferencia,
   } = useDetection();
@@ -114,6 +114,11 @@ export default function CameraScreen() {
     setConfianzaLocal(null);
     setReferenciaIdLocal(null);
     setModalVisible(true);
+  };
+
+  const cerrarModalReferencia = () => {
+    if (objetoReferencia) setModalVisible(false);
+    else router.back();
   };
 
   const tomarFotoEnModal = async () => {
@@ -176,31 +181,14 @@ export default function CameraScreen() {
     startDetection(cameraRef);
   };
 
-  const iniciarFotoMasiva = async () => {
-    const total = await contarFotoMasiva(cameraRef);
-    setResultadoFinal(total);
-    setUbicacion('');
-    setGuardado(false);
-  };
-
-  const elegirModoConteo = () => {
-    Alert.alert('¿Cómo quieres contar?', 'Tiempo real para objetos separados. Foto masiva para muchos objetos pequeños o juntos.', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Tiempo real', onPress: iniciarConteo },
-      { text: 'Foto masiva', onPress: iniciarFotoMasiva },
-    ]);
-  };
-
   const finalizarConteo = () => {
     const totalFinal = stopDetection();
     setResultadoFinal(totalFinal);
-    setUbicacion('');
-    setGuardado(false);
+    setReporteGuardado(false);
   };
 
-  const guardarConteo = async () => {
-    if (!objetoReferencia || resultadoFinal === null || guardando) return;
-    setGuardando(true);
+  const guardarConteo = async (ubicacion: string) => {
+    if (!objetoReferencia || resultadoFinal === null) return;
     try {
       const imagenPersistente = await persistirImagenReferencia(objetoReferencia.imagenUri);
       await guardarReporte({
@@ -210,15 +198,14 @@ export default function CameraScreen() {
         nombreObjeto: objetoReferencia.nombreUsuario,
         claseYolo: objetoReferencia.claseYolo,
         ubicacion: ubicacion.trim(),
+        modoConteo: 'tiempo_real',
         totalObjetos: resultadoFinal,
       });
-      setGuardado(true);
       console.log('[Reporte] Conteo guardado con auditoría.');
     } catch (error) {
       console.log('[Reporte] Error guardando conteo:', error);
       Alert.alert('Error', 'No se pudo guardar el reporte.');
-    } finally {
-      setGuardando(false);
+      throw error;
     }
   };
 
@@ -243,13 +230,15 @@ export default function CameraScreen() {
 
   return (
     <View style={styles.container} {...gestoHistorial.panHandlers}>
-      <Camera
-        ref={cameraRef}
-        style={styles.camera}
-        device={device}
-        isActive={!modalVisible}
-        photo={true}
-      />
+      {!modalVisible && (
+        <Camera
+          ref={cameraRef}
+          style={styles.camera}
+          device={device}
+          isActive={true}
+          photo={true}
+        />
+      )}
 
       {!modalVisible && <View style={styles.menuButton}><AppMenu /></View>}
 
@@ -281,73 +270,36 @@ export default function CameraScreen() {
       )}
 
       <View style={styles.controls}>
-        <TouchableOpacity style={styles.flipBtn} onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}>
+        <TouchableOpacity style={styles.navBtn} onPress={() => router.back()}>
+          <Text style={styles.navBackText}>‹</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.navBtn} onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}>
           <Text style={styles.flipText}>Voltear</Text>
         </TouchableOpacity>
 
-        {!isDetecting && (
-          <TouchableOpacity style={styles.flipBtn} onPress={() => router.push('/history')}>
-            <Text style={styles.flipText}>Reportes →</Text>
-          </TouchableOpacity>
-        )}
-
-        {!isDetecting && (
-          <TouchableOpacity
-            style={[styles.refBtn, objetoReferencia && styles.refBtnActive]}
-            onPress={abrirModalReferencia}
-          >
-            <Text style={styles.refBtnText}>
-              {objetoReferencia ? '🔄 Cambiar' : '📷 Qué contar'}
-            </Text>
-          </TouchableOpacity>
-        )}
-
         <Pressable
           style={[styles.captureBtn, isDetecting && styles.captureBtnActive, !objetoReferencia && styles.disabledBtn]}
-          onPress={isDetecting ? finalizarConteo : elegirModoConteo}
+          onPress={isDetecting ? finalizarConteo : iniciarConteo}
           disabled={!objetoReferencia && !isDetecting}
         >
           <Text style={styles.captureText}>{isDetecting ? 'Detener' : 'Contar'}</Text>
         </Pressable>
       </View>
 
-      {resultadoFinal !== null && (
+      {reporteGuardado && (
         <View style={styles.historyHint}>
           <Text style={styles.historyHintText}>Desliza hacia la izquierda para ver los reportes</Text>
         </View>
       )}
 
-      <Modal visible={resultadoFinal !== null} transparent animationType="fade" onRequestClose={() => setResultadoFinal(null)}>
-        <View style={styles.resultOverlay}>
-          <View style={styles.resultCard}>
-            <Text style={styles.resultTitle}>{guardado ? '✓ Conteo guardado' : 'Conteo finalizado'}</Text>
-            <Text style={styles.resultNumber}>{resultadoFinal ?? 0}</Text>
-            <Text style={styles.resultLabel}>{objetoReferencia?.nombreUsuario ?? 'objetos'} contados</Text>
-            <TextInput
-              style={styles.nameInput}
-              placeholder="Lugar: Lab 1, sala, bodega..."
-              placeholderTextColor="#999"
-              value={ubicacion}
-              onChangeText={setUbicacion}
-              editable={!guardado}
-            />
-            {!guardado ? (
-              <View style={styles.confirmBtns}>
-                <TouchableOpacity style={styles.retakeBtn} onPress={() => setResultadoFinal(null)}>
-                  <Text style={styles.retakeBtnText}>Ahora no</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.confirmBtn} onPress={guardarConteo} disabled={guardando}>
-                  {guardando ? <ActivityIndicator color="#111" /> : <Text style={styles.confirmBtnText}>Guardar</Text>}
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity style={styles.confirmBtn} onPress={() => setResultadoFinal(null)}>
-                <Text style={styles.confirmBtnText}>Listo</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-      </Modal>
+      <SaveReportModal
+        visible={resultadoFinal !== null}
+        total={resultadoFinal ?? 0}
+        etiqueta={objetoReferencia?.nombreUsuario ?? 'Objetos'}
+        onClose={() => setResultadoFinal(null)}
+        onSave={guardarConteo}
+        onSaved={() => setReporteGuardado(true)}
+      />
 
       {/* MODAL DE REFERENCIA */}
       <Modal visible={modalVisible} animationType="slide">
@@ -362,13 +314,17 @@ export default function CameraScreen() {
                 isActive={modalVisible && etapa === 'camara'}
                 photo={true}
               />
+              <View style={styles.modalMenu}><AppMenu /></View>
               <Text style={styles.modalHint}>Encuadra el objeto que quieres contar</Text>
               <View style={styles.modalControls}>
-                <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)}>
-                  <Text style={styles.cancelBtnText}>Cancelar</Text>
+                <TouchableOpacity style={styles.navBtn} onPress={cerrarModalReferencia}>
+                  <Text style={styles.navBackText}>‹</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.shutterBtn} onPress={tomarFotoEnModal} disabled={capturando}>
-                  {capturando ? <ActivityIndicator color="#111" /> : <Text style={styles.shutterText}>📸</Text>}
+                <TouchableOpacity style={styles.navBtn} onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}>
+                  <Text style={styles.flipText}>Voltear</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.captureBtn} onPress={tomarFotoEnModal} disabled={capturando}>
+                  {capturando ? <ActivityIndicator color="#111" /> : <Text style={styles.captureText}>Contar</Text>}
                 </TouchableOpacity>
               </View>
             </>
@@ -462,7 +418,7 @@ const styles = StyleSheet.create({
   },
   clearBtnText:     { color: '#fff', fontSize: 10 },
   totalBadge: {
-    position: 'absolute', top: 50, left: 16,
+    position: 'absolute', top: 98, left: 16,
     backgroundColor: 'rgba(0,0,0,0.85)',
     borderRadius: 16, paddingHorizontal: 20, paddingVertical: 12,
     borderWidth: 1.5, borderColor: '#4ADE80', alignItems: 'center',
@@ -478,14 +434,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 24, paddingHorizontal: 14, paddingVertical: 10,
   },
+  navBtn: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 24, minWidth: 46, paddingHorizontal: 14, paddingVertical: 10, justifyContent: 'center', alignItems: 'center' },
+  navBackText: { color: '#fff', fontSize: 30, lineHeight: 20 },
   flipText:         { color: '#fff', fontSize: 13 },
-  refBtn: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 20, paddingHorizontal: 12, paddingVertical: 10,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)',
-  },
-  refBtnActive:     { borderColor: '#4ADE80' },
-  refBtnText:       { color: '#fff', fontSize: 12 },
   captureBtn: {
     width: 76, height: 76, borderRadius: 38,
     backgroundColor: '#4ADE80',
@@ -506,21 +457,22 @@ const styles = StyleSheet.create({
   btnText:          { color: '#fff' },
   modalContainer:   { flex: 1, backgroundColor: '#000' },
   modalCamera:      { flex: 1 },
+  modalMenu: { position: 'absolute', top: 42, left: 10, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 22 },
   modalHint: {
-    position: 'absolute', top: 60, left: 0, right: 0,
+    position: 'absolute', top: 98, left: 20, right: 20,
     textAlign: 'center', color: '#fff', fontSize: 15,
     backgroundColor: 'rgba(0,0,0,0.5)', paddingVertical: 8,
   },
   modalControls: {
     position: 'absolute', bottom: 50, left: 0, right: 0,
     flexDirection: 'row', justifyContent: 'center',
-    alignItems: 'center', gap: 32,
+    alignItems: 'center', gap: 14,
   },
   cancelBtn: {
     backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 20, paddingHorizontal: 20, paddingVertical: 12,
   },
-  cancelBtnText:    { color: '#fff', fontSize: 15 },
+  cancelBtnText:    { color: '#fff', fontSize: 30, lineHeight: 30 },
   shutterBtn: {
     width: 72, height: 72, borderRadius: 36,
     backgroundColor: '#fff',

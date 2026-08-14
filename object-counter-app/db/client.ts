@@ -41,6 +41,7 @@ export async function initDB() {
     ['nombre_objeto', "TEXT NOT NULL DEFAULT ''"],
     ['clase_yolo', "TEXT NOT NULL DEFAULT ''"],
     ['ubicacion', "TEXT NOT NULL DEFAULT ''"],
+    ['modo_conteo', "TEXT NOT NULL DEFAULT 'tiempo_real'"],
   ] as const;
   for (const [nombre, definicion] of nuevasColumnas) {
     if (!existentes.has(nombre)) await sqlite.execAsync(`ALTER TABLE sesiones ADD COLUMN ${nombre} ${definicion}`);
@@ -55,15 +56,16 @@ export type ReporteGuardado = {
   nombreObjeto: string;
   claseYolo: string;
   ubicacion: string;
+  modoConteo: 'tiempo_real' | 'foto_estatica';
   totalObjetos: number;
 };
 
 export async function guardarReporte(datos: Omit<ReporteGuardado, 'id'>) {
   const resultado = await sqlite.runAsync(
-    `INSERT INTO sesiones (fecha_inicio, fecha_fin, imagen_uri, nombre_objeto, clase_yolo, ubicacion, total_objetos, estado)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'guardado')`,
+    `INSERT INTO sesiones (fecha_inicio, fecha_fin, imagen_uri, nombre_objeto, clase_yolo, ubicacion, modo_conteo, total_objetos, estado)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'guardado')`,
     datos.fechaInicio, datos.fechaFin, datos.imagenUri, datos.nombreObjeto,
-    datos.claseYolo, datos.ubicacion, datos.totalObjetos,
+    datos.claseYolo, datos.ubicacion, datos.modoConteo, datos.totalObjetos,
   );
   await sqlite.runAsync(
     'INSERT INTO auditoria_sesiones (sesion_id, evento, detalle, fecha) VALUES (?, ?, ?, ?)',
@@ -88,7 +90,7 @@ export async function persistirImagenReferencia(uri: string) {
 export async function listarReportes() {
   return sqlite.getAllAsync<ReporteGuardado>(`
     SELECT id, fecha_inicio AS fechaInicio, fecha_fin AS fechaFin, imagen_uri AS imagenUri,
-           nombre_objeto AS nombreObjeto, clase_yolo AS claseYolo, ubicacion, total_objetos AS totalObjetos
+           nombre_objeto AS nombreObjeto, clase_yolo AS claseYolo, ubicacion, modo_conteo AS modoConteo, total_objetos AS totalObjetos
     FROM sesiones WHERE estado = 'guardado' ORDER BY fecha_inicio DESC
   `);
 }

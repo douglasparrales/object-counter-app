@@ -12,6 +12,7 @@ export const sesiones = sqliteTable('sesiones', {
   nombreObjeto: text('nombre_objeto').notNull().default(''),
   claseYolo: text('clase_yolo').notNull().default(''),
   ubicacion: text('ubicacion').notNull().default(''),
+  modoConteo: text('modo_conteo').notNull().default('tiempo_real'),
 });
 
 export const resultados = sqliteTable('resultados', {
