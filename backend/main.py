@@ -1,6 +1,8 @@
 from fastapi import FastAPI, File, UploadFile, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO, YOLOWorld
+from routes.static_count import crear_router as crear_router_conteo_estatico
+from services.static_counter import StaticImageCounter
 from deep_translator import GoogleTranslator
 import io
 import time
@@ -51,6 +53,13 @@ ALIASES_YOLO = {
     "lapicero": ["ballpoint pen", "pen"],
     "pluma": ["pen"],
     "marcador": ["marker pen", "marker"],
+    "mouse": ["computer mouse", "mouse"],
+    "raton": ["computer mouse", "mouse"],
+    "teclado": ["computer keyboard", "keyboard"],
+    "telefono": ["cell phone", "smartphone", "phone"],
+    "celular": ["cell phone", "smartphone", "phone"],
+    "persona": ["person"],
+    "personas": ["person"],
 }
 
 # Categorías adicionales para la foto directa cuando COCO no detecta nada.
@@ -333,51 +342,29 @@ async def detect(
     return {"objetos": objetos}
 
 
-@app.post("/count-image")
-async def count_image(file: UploadFile = File(...)):
-    """Conteo directo de una sola foto, sin referencia ni nombre previo.
-
-    Usa YOLOv8 COCO para identificar clases comunes y devuelve el total más un
-    desglose. Es el modo indicado para una escena fija con muchos objetos.
-    """
-    t0 = time.time()
-    try:
-        image = Image.open(io.BytesIO(await file.read())).convert("RGB")
-    except Exception as e:
-        print(f"[count-image ERROR] Imagen inválida: {e}")
-        raise HTTPException(status_code=400, detail="No se pudo leer la imagen enviada.")
-
-    try:
-        with model_lock:
-            print("[count-image] Analizando foto estática a resolución alta...")
-            # Foto directa: prioriza precisión. Cajas COCO débiles como un
-            # "refrigerator" gigante suelen ser falsos positivos de fondo.
-            results = model_general(image, conf=0.40, imgsz=960, verbose=False)
-        if not any(len(result.boxes) for result in results):
-            print("[count-image] Sin clases COCO; probando categorías de objetos pequeños...")
-            results = ejecutar_inferencia(image, CATEGORIAS_FOTO_DIRECTA, confianza=0.10, imgsz=960)
-    except Exception as e:
-        print(f"[count-image ERROR] Inferencia: {e}")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail="No se pudo contar la imagen.")
-
-    ancho, alto = image.size
-    objetos = []
-    resumen: dict[str, int] = {}
+def convertir_resultados(results) -> list[tuple[str, float, tuple[float, float, float, float]]]:
+    predicciones = []
     for result in results:
         for box in result.boxes:
-            confianza = float(box.conf[0])
-            x1, y1, x2, y2 = [float(valor) for valor in box.xyxy[0]]
-            clase = result.names[int(box.cls[0])]
-            resumen[clase] = resumen.get(clase, 0) + 1
-            objetos.append({
-                "clase": clase,
-                "confianza": round(confianza, 3),
-                "cx": round(((x1 + x2) / 2) / ancho, 4),
-                "cy": round(((y1 + y2) / 2) / alto, 4),
-                "w": round((x2 - x1) / ancho, 4),
-                "h": round((y2 - y1) / alto, 4),
-            })
+            predicciones.append((
+                result.names[int(box.cls[0])],
+                float(box.conf[0]),
+                tuple(float(valor) for valor in box.xyxy[0]),
+            ))
+    return predicciones
 
-    print(f"[count-image RESULTADO] Total: {len(objetos)} | Clases: {resumen} | Tiempo: {round(time.time() - t0, 3)}s")
-    return {"total": len(objetos), "resumen": resumen, "objetos": objetos}
+
+def inferir_general_estatico(image: Image.Image, confianza: float, imgsz: int):
+    with model_lock:
+        return convertir_resultados(model_general(image, conf=confianza, imgsz=imgsz, verbose=False))
+
+
+def inferir_abierto_estatico(image: Image.Image, confianza: float, imgsz: int, objetivo: str):
+    _, candidatos = obtener_candidatos(objetivo) if objetivo else ("", CATEGORIAS_FOTO_DIRECTA)
+    return convertir_resultados(
+        ejecutar_inferencia(image, candidatos, confianza=confianza, imgsz=imgsz)
+    )
+
+
+contador_estatico = StaticImageCounter(inferir_general_estatico, inferir_abierto_estatico)
+app.include_router(crear_router_conteo_estatico(contador_estatico))
