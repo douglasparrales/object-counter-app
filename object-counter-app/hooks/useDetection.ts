@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import type { RefObject } from 'react';
 import type { Camera } from 'react-native-vision-camera';
+import { BACKEND_URL } from '../config/backend';
 
 export type CajaGuardada = {
   id: number;
@@ -28,13 +29,11 @@ export type ResultadoIdentificacion = {
   referenciaId: string | null;
 };
 
-const BACKEND_URL = 'http://192.168.1.3:8000';
 const INTERVAL_MS = 400;
-const IOU_MINIMO = 0.08;
-const DISTANCIA_MAXIMA = 0.24;
-const FRAMES_PARA_CONFIRMAR = 1;
-const TIEMPO_MAXIMO_SIN_VER_MS = 1200;
-const TIEMPO_VISIBLE_EN_FRAME_MS = 650;
+const IOU_MINIMO = 0.18;
+const FRAMES_PARA_CONFIRMAR = 2;
+const TIEMPO_MAXIMO_PARA_ASOCIAR_MS = 2200;
+const TIEMPO_VISIBLE_EN_FRAME_MS = 1800;
 
 function distancia(a: CajaGuardada, b: DeteccionRemota) {
   return Math.hypot(a.cx - b.cx, a.cy - b.cy);
@@ -53,6 +52,11 @@ function iou(a: CajaGuardada, b: DeteccionRemota) {
     * Math.max(0, Math.min(ay2, by2) - Math.max(ay1, by1));
   const union = a.w * a.h + b.w * b.h - interseccion;
   return union > 0 ? interseccion / union : 0;
+}
+
+function limiteDistancia(a: CajaGuardada, b: DeteccionRemota) {
+  const tamano = Math.max(a.w, a.h, b.w, b.h);
+  return Math.max(0.045, Math.min(0.12, tamano * 0.75));
 }
 
 export function useDetection() {
@@ -111,18 +115,25 @@ export function useDetection() {
 
   const actualizarTracks = useCallback((detecciones: DeteccionRemota[]) => {
     const ahora = Date.now();
-    const tracks = tracksRef.current.filter((track) => ahora - track.ultimoVisto <= TIEMPO_MAXIMO_SIN_VER_MS);
+    // Los tracks confirmados se conservan durante toda la sesión: el total
+    // no puede bajar sólo porque un objeto salió momentáneamente del encuadre.
+    const tracks = [...tracksRef.current];
     const tracksUsados = new Set<number>();
 
     for (const deteccion of detecciones) {
       let mejorTrack: Track | undefined;
-      let mejorIou = -1;
+      let mejorPuntaje = -1;
       for (const track of tracks) {
         if (tracksUsados.has(track.id)) continue;
+        if (ahora - track.ultimoVisto > TIEMPO_MAXIMO_PARA_ASOCIAR_MS) continue;
         const solapamiento = iou(track, deteccion);
-        if ((solapamiento >= IOU_MINIMO || distancia(track, deteccion) <= DISTANCIA_MAXIMA) && solapamiento > mejorIou) {
+        const distanciaCentro = distancia(track, deteccion);
+        const distanciaPermitida = limiteDistancia(track, deteccion);
+        if (solapamiento < IOU_MINIMO && distanciaCentro > distanciaPermitida) continue;
+        const puntaje = solapamiento * 2 + (1 - distanciaCentro / distanciaPermitida);
+        if (puntaje > mejorPuntaje) {
           mejorTrack = track;
-          mejorIou = solapamiento;
+          mejorPuntaje = puntaje;
         }
       }
 
@@ -137,7 +148,7 @@ export function useDetection() {
     for (const track of tracks) {
       if (!track.confirmado && track.vistas >= FRAMES_PARA_CONFIRMAR) {
         track.confirmado = true;
-        console.log(`[Tracking] Objeto estable confirmado #${track.id}.`);
+        console.log(`[Tracking] Objeto estable confirmado #${track.id}. Total acumulado: ${tracks.filter((item) => item.confirmado).length}`);
       }
     }
 
@@ -147,11 +158,11 @@ export function useDetection() {
       // inflar el total mientras la cámara ya está mostrando otra posición.
       .filter((track) => track.confirmado && ahora - track.ultimoVisto <= TIEMPO_VISIBLE_EN_FRAME_MS)
       .map(({ vistas, confirmado, ultimoVisto, ...caja }) => caja);
-    // El total representa una escena estable, no la suma de cada aparición.
-    // Así una misma pluma no puede aumentar el total al oscilar su caja.
-    totalRef.current = visibles.length;
+    // El total conserva los objetos únicos confirmados durante la sesión;
+    // las cajas visibles sólo funcionan como marcadores sobre la cámara.
+    totalRef.current = tracks.filter((track) => track.confirmado).length;
     setCajasGuardadas(visibles);
-    setTotalContado(visibles.length);
+    setTotalContado(totalRef.current);
   }, []);
 
   const confirmarObjeto = useCallback((claseYolo: string, nombreUsuario: string, imagenUri: string, referenciaId: string | null) => {

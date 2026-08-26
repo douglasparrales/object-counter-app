@@ -5,8 +5,7 @@ import { useRouter } from 'expo-router';
 import AppMenu from '../components/AppMenu';
 import SaveReportModal from '../components/SaveReportModal';
 import { guardarReporte, persistirImagenReferencia } from '../db/client';
-
-const BACKEND_URL = 'http://192.168.1.3:8000';
+import { BACKEND_URL } from '../config/backend';
 
 type Resultado = { total: number; resumen: Record<string, number> };
 

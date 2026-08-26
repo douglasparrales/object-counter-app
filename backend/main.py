@@ -131,7 +131,12 @@ def similitud_visual(referencia: dict, candidato: Image.Image) -> float:
 
 def guardar_referencia_visual(image: Image.Image, caja: tuple[float, float, float, float] | None) -> str:
     referencia_id = str(uuid.uuid4())
-    referencias_visuales[referencia_id] = crear_descriptor_visual(recortar_imagen(image, caja))
+    referencias_visuales[referencia_id] = {
+        "descriptor": crear_descriptor_visual(recortar_imagen(image, caja)),
+        # Si YOLO no localizó la referencia, su foto incluye fondo además del
+        # objeto: compararla contra una caja genera falsos negativos.
+        "usar_similitud": caja is not None,
+    }
     while len(referencias_visuales) > MAX_REFERENCIAS_EN_MEMORIA:
         referencias_visuales.pop(next(iter(referencias_visuales)))
     print(f"[REFERENCIA] Firma visual guardada: {referencia_id[:8]}...")
@@ -152,7 +157,7 @@ def traducir_a_ingles(palabra_es: str) -> str:
         return palabra_es
     if palabra_es in traducciones_cache:
         return traducciones_cache[palabra_es]
-    if palabra_es.isascii() and palabra_es.isalpha():
+    if palabra_es.isascii() and all(caracter.isalpha() or caracter in " -" for caracter in palabra_es):
         traducciones_cache[palabra_es] = palabra_es
         return palabra_es
     try:
@@ -220,7 +225,9 @@ async def identify(
         print(f"⚠️ [/identify RESULTADO] Objeto '{prompt_es}' NO encontrado. Máxima confianza: {round(mejor_conf, 3)} | Tiempo: {duracion}s")
         return {
             "exito": False,
-            "clase": prompt_es or "desconocido",
+            # Aunque la foto de referencia no se confirme, devolvemos la
+            # etiqueta inglesa que usará YOLO en los frames posteriores.
+            "clase": candidatos[0] if candidatos else (prompt_es or "desconocido"),
             "traduccion": prompt_en,
             "confianza": round(mejor_conf, 3),
             "referencia_id": referencia_id,
@@ -257,7 +264,9 @@ async def detect(
     img_w, img_h = image.size
     clase = normalizar(clase_filtro)
     _, candidatos = obtener_candidatos(clase)
-    referencia = referencias_visuales.get(referencia_id)
+    referencia_registro = referencias_visuales.get(referencia_id)
+    referencia = referencia_registro["descriptor"] if referencia_registro else None
+    usar_similitud = bool(referencia_registro and referencia_registro["usar_similitud"])
     if referencia_id and referencia is None:
         print("[REFERENCIA] ID no disponible; se usará sólo el filtro de YOLO.")
     print(f"🎯 [/detect] Clases enviadas a YOLO: {candidatos}")
@@ -285,7 +294,7 @@ async def detect(
             h  = (y2 - y1) / img_h
             clase_nombre = result.names[int(box.cls[0])]
 
-            similitud = similitud_visual(referencia, recortar_imagen(image, (x1, y1, x2, y2))) if referencia else None
+            similitud = similitud_visual(referencia, recortar_imagen(image, (x1, y1, x2, y2))) if referencia and usar_similitud else None
             # La foto de referencia suele incluir fondo y cambia de iluminación
             # frente al frame. Sólo descartamos diferencias muy marcadas.
             if similitud is not None and similitud < 0.25:

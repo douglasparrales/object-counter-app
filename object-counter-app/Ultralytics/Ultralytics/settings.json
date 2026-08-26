@@ -1,0 +1,21 @@
+{
+  "settings_version": "0.0.6",
+  "datasets_dir": "C:\\dev\\datasets",
+  "weights_dir": "C:\\dev\\object-counter-app\\weights",
+  "runs_dir": "C:\\dev\\object-counter-app\\runs",
+  "uuid": "3de6a1387a0618f82eac15a6ef38b4ae0b60a1916b7a0225f3608a75a4b2225d",
+  "sync": true,
+  "api_key": "",
+  "openai_api_key": "",
+  "clearml": true,
+  "comet": true,
+  "dvc": true,
+  "hub": true,
+  "mlflow": true,
+  "neptune": true,
+  "raytune": true,
+  "tensorboard": false,
+  "wandb": false,
+  "vscode_msg": true,
+  "openvino_msg": false
+}

@@ -1,72 +1,23 @@
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   StyleSheet, View, Text, Pressable, TouchableOpacity,
   Image, ActivityIndicator, Modal, TextInput, Alert,
-  useWindowDimensions, PanResponder,
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import { useRouter } from 'expo-router';
 import { guardarReporte, persistirImagenReferencia } from '../db/client';
 import AppMenu from '../components/AppMenu';
+import ARView from '../components/ARView';
 import SaveReportModal from '../components/SaveReportModal';
 import {
   useDetection,
-  CajaGuardada,
 } from '../hooks/useDetection';
-
-function BoundingBox({
-  caja,
-  screenW,
-  screenH,
-}: {
-  caja: CajaGuardada;
-  screenW: number;
-  screenH: number;
-}) {
-  const boxW = caja.w * screenW;
-  const boxH = caja.h * screenH;
-  const left = (caja.cx - caja.w / 2) * screenW;
-  const top  = (caja.cy - caja.h / 2) * screenH;
-
-  return (
-    <View
-      style={{
-        position: 'absolute',
-        left,
-        top,
-        width: boxW,
-        height: boxH,
-        borderWidth: 2.5,
-        borderColor: '#4ADE80',
-        borderRadius: 6,
-        backgroundColor: 'rgba(74, 222, 128, 0.12)',
-      }}
-    >
-      <View
-        style={{
-          position: 'absolute',
-          top: -22,
-          left: -2,
-          backgroundColor: '#4ADE80',
-          paddingHorizontal: 6,
-          paddingVertical: 2,
-          borderRadius: 4,
-        }}
-      >
-        <Text style={{ color: '#111', fontSize: 11, fontWeight: '800' }}>
-          #{caja.id} {caja.clase}
-        </Text>
-      </View>
-    </View>
-  );
-}
 
 // Etapas del modal de referencia
 type EtapaModal = 'camara' | 'nombrar' | 'identificando' | 'resultado';
 
 export default function CameraScreen() {
   const router = useRouter();
-  const { width: screenW, height: screenH } = useWindowDimensions();
   const { hasPermission, requestPermission } = useCameraPermission();
   const [facing, setFacing]     = useState<'back' | 'front'>('back');
   const device                  = useCameraDevice(facing);
@@ -85,13 +36,13 @@ export default function CameraScreen() {
   const [capturando, setCapturando]         = useState(false);
   const [resultadoFinal, setResultadoFinal] = useState<number | null>(null);
   const [reporteGuardado, setReporteGuardado] = useState(false);
+  const [modoAR, setModoAR] = useState(false);
 
   const {
     totalContado,
     cajasGuardadas,
     isDetecting,
     objetoReferencia,
-    identificando,
     confirmarObjeto,
     identificarFoto,
     startDetection,
@@ -99,14 +50,8 @@ export default function CameraScreen() {
     limpiarReferencia,
   } = useDetection();
 
-  const gestoHistorial = useMemo(() => PanResponder.create({
-    onMoveShouldSetPanResponder: (_, gesto) => Math.abs(gesto.dx) > 25 && Math.abs(gesto.dx) > Math.abs(gesto.dy),
-    onPanResponderRelease: (_, gesto) => {
-      if (gesto.dx < -80) router.push('/history');
-    },
-  }), [router]);
-
   const abrirModalReferencia = () => {
+    limpiarReferencia();
     setEtapa('camara');
     setFotoCapturada(null);
     setNombreUsuario('');
@@ -174,16 +119,25 @@ export default function CameraScreen() {
     confirmarObjeto(clase, nombre, fotoCapturada, referenciaIdLocal);
     console.log(`[Conteo] Referencia confirmada: nombre="${nombre}", clase="${clase}"`);
     setModalVisible(false);
+    setModoAR(true);
+    console.log('[AR] Iniciando sesión ARCore con una sola cámara.');
   };
 
   const iniciarConteo = () => {
     console.log('[Conteo] Iniciando cámara y tracking.');
-    startDetection(cameraRef);
+    setModoAR(true);
   };
 
   const finalizarConteo = () => {
-    const totalFinal = stopDetection();
+    const totalFinal = 0;
     setResultadoFinal(totalFinal);
+    setReporteGuardado(false);
+  };
+
+  const finalizarAR = (total: number) => {
+    console.log(`[AR] Sesión finalizada. Total anclado: ${total}`);
+    setModoAR(false);
+    setResultadoFinal(total);
     setReporteGuardado(false);
   };
 
@@ -229,8 +183,11 @@ export default function CameraScreen() {
   }
 
   return (
-    <View style={styles.container} {...gestoHistorial.panHandlers}>
-      {!modalVisible && (
+    <View style={styles.container}>
+      {modoAR && objetoReferencia ? (
+        <ARView objetoReferencia={objetoReferencia} onDetener={finalizarAR} />
+      ) : <>
+      {!modalVisible && resultadoFinal === null && (
         <Camera
           ref={cameraRef}
           style={styles.camera}
@@ -241,11 +198,6 @@ export default function CameraScreen() {
       )}
 
       {!modalVisible && <View style={styles.menuButton}><AppMenu /></View>}
-
-      {isDetecting &&
-        cajasGuardadas.map((caja) => (
-          <BoundingBox key={`caja-${caja.id}`} caja={caja} screenW={screenW} screenH={screenH} />
-        ))}
 
       {objetoReferencia && (
         <View style={styles.referenceBox}>
@@ -292,11 +244,15 @@ export default function CameraScreen() {
         </View>
       )}
 
+      </>}
       <SaveReportModal
         visible={resultadoFinal !== null}
         total={resultadoFinal ?? 0}
         etiqueta={objetoReferencia?.nombreUsuario ?? 'Objetos'}
-        onClose={() => setResultadoFinal(null)}
+        onClose={() => {
+          setResultadoFinal(null);
+          abrirModalReferencia();
+        }}
         onSave={guardarConteo}
         onSaved={() => setReporteGuardado(true)}
       />
