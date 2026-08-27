@@ -5,13 +5,15 @@ import { useRouter } from 'expo-router';
 import AppMenu from '../components/AppMenu';
 import SaveReportModal from '../components/SaveReportModal';
 import { guardarReporte, persistirImagenReferencia } from '../db/client';
-import { contarFotoEstatica, type SeleccionVisual } from '../services/staticCountApi';
+import { contarFotoEstatica, type ObjetoConteoEstatico, type SeleccionVisual } from '../services/staticCountApi';
 
 type Resultado = {
   total: number;
   resumen: Record<string, number>;
   imagenAnotada: string | null;
   imagenMosaicos: string | null;
+  objetos: ObjetoConteoEstatico[];
+  diagnostico: { ruta: string; mosaicos: number; duracionSegundos: number };
 };
 
 export default function StaticCountScreen() {
@@ -27,7 +29,11 @@ export default function StaticCountScreen() {
   const [seleccion, setSeleccion] = useState<SeleccionVisual | null>(null);
   const inicioSeleccionRef = useRef({ x: 0, y: 0 });
   const tamanoSelectorRef = useRef({ width: 1, height: 1 });
+  const tamanoAuditoriaRef = useRef({ width: 1, height: 1 });
+  const objetosAutomaticosRef = useRef<ObjetoConteoEstatico[]>([]);
+  const correccionesRef = useRef({ agregados: 0, eliminados: 0 });
   const [vistaAuditoria, setVistaAuditoria] = useState<'detecciones' | 'mosaicos'>('detecciones');
+  const [modoAgregar, setModoAgregar] = useState(false);
   const [mostrarGuardado, setMostrarGuardado] = useState(false);
   const [reporteGuardado, setReporteGuardado] = useState(false);
   const gestoHistorial = useMemo(() => PanResponder.create({
@@ -98,8 +104,13 @@ export default function StaticCountScreen() {
         resumen: data.resumen,
         imagenAnotada: data.imagenAnotada,
         imagenMosaicos: data.imagenMosaicos,
+        objetos: data.objetos,
+        diagnostico: data.diagnostico,
       });
+      objetosAutomaticosRef.current = data.objetos.map((objeto) => ({ ...objeto }));
+      correccionesRef.current = { agregados: 0, eliminados: 0 };
       setVistaAuditoria('detecciones');
+      setModoAgregar(false);
       console.log('[Foto directa] Resultado:', data);
     } catch (error: any) {
       console.log('[Foto directa] Error:', error?.message ?? error);
@@ -109,14 +120,61 @@ export default function StaticCountScreen() {
     }
   };
 
+  const actualizarObjetos = (transformar: (actuales: ObjetoConteoEstatico[]) => ObjetoConteoEstatico[]) => {
+    setResultado((actual) => {
+      if (!actual) return actual;
+      const objetos = transformar(actual.objetos).map((objeto, indice) => ({ ...objeto, id: indice + 1 }));
+      const resumen = objetos.reduce<Record<string, number>>((acumulado, objeto) => {
+        acumulado[objeto.clase] = (acumulado[objeto.clase] ?? 0) + 1;
+        return acumulado;
+      }, {});
+      return { ...actual, objetos, resumen, total: objetos.length };
+    });
+  };
+
+  const eliminarObjeto = (id: number) => {
+    correccionesRef.current.eliminados += 1;
+    actualizarObjetos((actuales) => actuales.filter((objeto) => objeto.id !== id));
+  };
+
+  const agregarObjeto = (locationX: number, locationY: number) => {
+    if (!seleccion) return;
+    const { width, height } = tamanoAuditoriaRef.current;
+    const cx = Math.max(seleccion.w / 2, Math.min(1 - seleccion.w / 2, locationX / width));
+    const cy = Math.max(seleccion.h / 2, Math.min(1 - seleccion.h / 2, locationY / height));
+    actualizarObjetos((actuales) => [...actuales, {
+      id: actuales.length + 1,
+      clase: objetivo.trim() || 'objeto añadido',
+      confianza: 1,
+      cx,
+      cy,
+      w: seleccion.w,
+      h: seleccion.h,
+    }]);
+    correccionesRef.current.agregados += 1;
+    setModoAgregar(false);
+  };
+
   const guardarResultado = async (ubicacion: string) => {
     if (!foto || !resultado) return;
     try {
       const imagenUri = await persistirImagenReferencia(foto);
       await guardarReporte({
         fechaInicio: new Date().toISOString(), fechaFin: new Date().toISOString(), imagenUri,
-        nombreObjeto: 'Conteo desde foto', claseYolo: Object.keys(resultado.resumen).join(', '),
+        nombreObjeto: objetivo.trim() || 'Conteo desde foto', claseYolo: Object.keys(resultado.resumen).join(', '),
         ubicacion, modoConteo: 'foto_estatica', totalObjetos: resultado.total,
+      }, {
+        objetivo: objetivo.trim(),
+        seleccion: seleccion!,
+        objetosAutomaticos: objetosAutomaticosRef.current,
+        objetosConfirmados: resultado.objetos,
+        totalAutomatico: objetosAutomaticosRef.current.length,
+        totalConfirmado: resultado.total,
+        objetosAgregados: correccionesRef.current.agregados,
+        objetosEliminados: correccionesRef.current.eliminados,
+        rutaInferencia: resultado.diagnostico.ruta,
+        mosaicos: resultado.diagnostico.mosaicos,
+        duracionSegundos: resultado.diagnostico.duracionSegundos,
       });
     } catch (error) {
       console.log('[Foto directa] Error guardando:', error);
@@ -179,16 +237,45 @@ export default function StaticCountScreen() {
             <View><Text style={styles.auditTitle}>Revisión del conteo</Text><Text style={styles.auditTotal}>{resultado?.total ?? 0} candidatos</Text></View>
             <TouchableOpacity style={styles.auditClose} onPress={() => { setResultado(null); setFoto(null); }}><Text style={styles.auditCloseText}>×</Text></TouchableOpacity>
           </View>
-          <Image
-            source={{ uri: vistaAuditoria === 'mosaicos' ? (resultado?.imagenMosaicos ?? foto ?? '') : (resultado?.imagenAnotada ?? foto ?? '') }}
-            style={styles.auditImage}
-            resizeMode="contain"
-          />
+          {vistaAuditoria === 'mosaicos' ? (
+            <Image source={{ uri: resultado?.imagenMosaicos ?? foto ?? '' }} style={styles.auditImage} resizeMode="contain" />
+          ) : (
+            <View
+              style={styles.auditImage}
+              onLayout={(evento) => { tamanoAuditoriaRef.current = evento.nativeEvent.layout; }}
+              onStartShouldSetResponder={() => modoAgregar}
+              onResponderRelease={(evento) => agregarObjeto(evento.nativeEvent.locationX, evento.nativeEvent.locationY)}
+            >
+              <Image source={{ uri: foto ?? '' }} style={StyleSheet.absoluteFill} resizeMode="stretch" />
+              {seleccion && <View pointerEvents="none" style={[styles.referenceBox, {
+                left: `${seleccion.x * 100}%` as `${number}%`, top: `${seleccion.y * 100}%` as `${number}%`,
+                width: `${seleccion.w * 100}%` as `${number}%`, height: `${seleccion.h * 100}%` as `${number}%`,
+              }]} />}
+              {resultado?.objetos.map((objeto) => (
+                <TouchableOpacity
+                  key={objeto.id}
+                  style={[styles.editableBox, {
+                    left: `${(objeto.cx - objeto.w / 2) * 100}%` as `${number}%`,
+                    top: `${(objeto.cy - objeto.h / 2) * 100}%` as `${number}%`,
+                    width: `${objeto.w * 100}%` as `${number}%`,
+                    height: `${objeto.h * 100}%` as `${number}%`,
+                  }]}
+                  onPress={() => eliminarObjeto(objeto.id)}
+                  disabled={modoAgregar}
+                >
+                  <Text style={styles.boxNumber}>#{objeto.id}</Text>
+                  {!modoAgregar && <Text style={styles.boxRemove}>×</Text>}
+                </TouchableOpacity>
+              ))}
+              {modoAgregar && <View pointerEvents="none" style={styles.addModeOverlay}><Text style={styles.addModeText}>Toca el centro del objeto omitido</Text></View>}
+            </View>
+          )}
           <View style={styles.auditTabs}>
-            <TouchableOpacity style={[styles.auditTab, vistaAuditoria === 'detecciones' && styles.auditTabActive]} onPress={() => setVistaAuditoria('detecciones')}><Text style={styles.auditTabText}>Detecciones</Text></TouchableOpacity>
-            <TouchableOpacity style={[styles.auditTab, vistaAuditoria === 'mosaicos' && styles.auditTabActive]} onPress={() => setVistaAuditoria('mosaicos')}><Text style={styles.auditTabText}>Mosaicos</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.auditTab, vistaAuditoria === 'detecciones' && styles.auditTabActive]} onPress={() => { setVistaAuditoria('detecciones'); setModoAgregar(false); }}><Text style={styles.auditTabText}>Detecciones</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.auditTab, vistaAuditoria === 'mosaicos' && styles.auditTabActive]} onPress={() => { setVistaAuditoria('mosaicos'); setModoAgregar(false); }}><Text style={styles.auditTabText}>Mosaicos</Text></TouchableOpacity>
           </View>
-          <Text style={styles.auditHint}>{vistaAuditoria === 'detecciones' ? 'Cada caja numerada forma parte del total.' : 'Las líneas celestes muestran los recortes y su solapamiento.'}</Text>
+          {vistaAuditoria === 'detecciones' && <TouchableOpacity style={[styles.addButton, modoAgregar && styles.addButtonActive]} onPress={() => setModoAgregar((actual) => !actual)}><Text style={styles.addButtonText}>{modoAgregar ? 'Cancelar adición' : '+ Añadir objeto omitido'}</Text></TouchableOpacity>}
+          <Text style={styles.auditHint}>{vistaAuditoria === 'detecciones' ? (modoAgregar ? 'Toca el centro del objeto que falta.' : 'Toca la × de una caja incorrecta para eliminarla.') : 'Las líneas celestes muestran los recortes y su solapamiento.'}</Text>
           <View style={styles.auditActions}>
             <TouchableOpacity style={styles.auditRetake} onPress={() => { setResultado(null); setFoto(null); }}><Text style={styles.auditRetakeText}>Repetir foto</Text></TouchableOpacity>
             <TouchableOpacity style={styles.auditContinue} onPress={() => setMostrarGuardado(true)}><Text style={styles.auditContinueText}>Continuar</Text></TouchableOpacity>
@@ -224,9 +311,15 @@ const styles = StyleSheet.create({
   auditTitle: { color: '#fff', fontSize: 21, fontWeight: '800' }, auditTotal: { color: '#4ADE80', fontSize: 15, marginTop: 2, fontWeight: '700' },
   auditClose: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#242c35', alignItems: 'center', justifyContent: 'center' }, auditCloseText: { color: '#fff', fontSize: 30, lineHeight: 32 },
   auditImage: { flex: 1, width: '100%', backgroundColor: '#000', borderRadius: 14 },
+  referenceBox: { position: 'absolute', borderWidth: 2, borderColor: '#FACC15' },
+  editableBox: { position: 'absolute', borderWidth: 2, borderColor: '#4ADE80', backgroundColor: 'rgba(74,222,128,0.08)' },
+  boxNumber: { position: 'absolute', top: -23, left: -2, color: '#10151c', backgroundColor: '#4ADE80', fontWeight: '900', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4, fontSize: 11 },
+  boxRemove: { position: 'absolute', top: -16, right: -13, width: 28, height: 28, borderRadius: 14, textAlign: 'center', textAlignVertical: 'center', color: '#fff', backgroundColor: '#EF4444', fontSize: 20, fontWeight: '800' },
+  addModeOverlay: { position: 'absolute', top: 12, left: 12, right: 12, alignItems: 'center' }, addModeText: { color: '#10151c', backgroundColor: '#4ADE80', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 14, fontWeight: '800', fontSize: 12 },
   auditTabs: { flexDirection: 'row', backgroundColor: '#1b232c', borderRadius: 12, padding: 4, marginTop: 14 },
   auditTab: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 9 }, auditTabActive: { backgroundColor: '#34414d' }, auditTabText: { color: '#fff', fontWeight: '700' },
   auditHint: { color: '#aab4bf', fontSize: 12, textAlign: 'center', marginTop: 9 },
+  addButton: { alignSelf: 'center', backgroundColor: '#25303a', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 9, marginTop: 10, borderWidth: 1, borderColor: '#4ADE80' }, addButtonActive: { backgroundColor: '#365f4a' }, addButtonText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   auditActions: { flexDirection: 'row', gap: 12, marginTop: 14 },
   auditRetake: { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 12, backgroundColor: '#29323c' }, auditRetakeText: { color: '#fff', fontWeight: '700' },
   auditContinue: { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 12, backgroundColor: '#4ADE80' }, auditContinueText: { color: '#10151c', fontWeight: '800' },

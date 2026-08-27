@@ -60,22 +60,52 @@ export type ReporteGuardado = {
   totalObjetos: number;
 };
 
-export async function guardarReporte(datos: Omit<ReporteGuardado, 'id'>) {
-  const resultado = await sqlite.runAsync(
-    `INSERT INTO sesiones (fecha_inicio, fecha_fin, imagen_uri, nombre_objeto, clase_yolo, ubicacion, modo_conteo, total_objetos, estado)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'guardado')`,
-    datos.fechaInicio, datos.fechaFin, datos.imagenUri, datos.nombreObjeto,
-    datos.claseYolo, datos.ubicacion, datos.modoConteo, datos.totalObjetos,
-  );
-  await sqlite.runAsync(
-    'INSERT INTO auditoria_sesiones (sesion_id, evento, detalle, fecha) VALUES (?, ?, ?, ?)',
-    resultado.lastInsertRowId, 'REPORTE_GUARDADO', `Total: ${datos.totalObjetos}`, new Date().toISOString(),
-  );
-  await sqlite.runAsync(
-    'INSERT INTO resultados (sesion_id, clase_objeto, cantidad, confianza_promedio) VALUES (?, ?, ?, ?)',
-    resultado.lastInsertRowId, datos.claseYolo || datos.nombreObjeto, datos.totalObjetos, 0,
-  );
-  return resultado.lastInsertRowId;
+export type AuditoriaConteoEstatico = {
+  objetivo: string;
+  seleccion: { x: number; y: number; w: number; h: number };
+  objetosAutomaticos: unknown[];
+  objetosConfirmados: unknown[];
+  totalAutomatico: number;
+  totalConfirmado: number;
+  objetosAgregados: number;
+  objetosEliminados: number;
+  rutaInferencia: string;
+  mosaicos: number;
+  duracionSegundos: number;
+};
+
+export async function guardarReporte(
+  datos: Omit<ReporteGuardado, 'id'>,
+  auditoriaEstatica?: AuditoriaConteoEstatico,
+) {
+  let sesionId = 0;
+  await sqlite.withTransactionAsync(async () => {
+    const resultado = await sqlite.runAsync(
+      `INSERT INTO sesiones (fecha_inicio, fecha_fin, imagen_uri, nombre_objeto, clase_yolo, ubicacion, modo_conteo, total_objetos, estado)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'guardado')`,
+      datos.fechaInicio, datos.fechaFin, datos.imagenUri, datos.nombreObjeto,
+      datos.claseYolo, datos.ubicacion, datos.modoConteo, datos.totalObjetos,
+    );
+    sesionId = resultado.lastInsertRowId;
+    await sqlite.runAsync(
+      'INSERT INTO auditoria_sesiones (sesion_id, evento, detalle, fecha) VALUES (?, ?, ?, ?)',
+      sesionId, 'REPORTE_GUARDADO', `Total: ${datos.totalObjetos}`, new Date().toISOString(),
+    );
+    await sqlite.runAsync(
+      'INSERT INTO resultados (sesion_id, clase_objeto, cantidad, confianza_promedio) VALUES (?, ?, ?, ?)',
+      sesionId, datos.claseYolo || datos.nombreObjeto, datos.totalObjetos, 0,
+    );
+    if (auditoriaEstatica) {
+      await sqlite.runAsync(
+        'INSERT INTO auditoria_sesiones (sesion_id, evento, detalle, fecha) VALUES (?, ?, ?, ?)',
+        sesionId,
+        'CONTEO_ESTATICO_CONFIRMADO',
+        JSON.stringify(auditoriaEstatica),
+        new Date().toISOString(),
+      );
+    }
+  });
+  return sesionId;
 }
 
 // Las fotos de VisionCamera pueden vivir en caché. Copiarlas a documentos

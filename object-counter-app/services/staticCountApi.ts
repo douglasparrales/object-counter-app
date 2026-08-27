@@ -1,19 +1,26 @@
 import { BACKEND_URL } from '../config/backend';
 
+export type ObjetoConteoEstatico = {
+  id: number;
+  clase: string;
+  confianza: number;
+  cx: number;
+  cy: number;
+  w: number;
+  h: number;
+};
+
 export type ResultadoConteoEstatico = {
   total: number;
   resumen: Record<string, number>;
-  objetos: Array<{
-    id: number;
-    clase: string;
-    confianza: number;
-    cx: number;
-    cy: number;
-    w: number;
-    h: number;
-  }>;
+  objetos: ObjetoConteoEstatico[];
   imagenAnotada: string | null;
   imagenMosaicos: string | null;
+  diagnostico: {
+    ruta: string;
+    mosaicos: number;
+    duracionSegundos: number;
+  };
 };
 
 export type SeleccionVisual = { x: number; y: number; w: number; h: number };
@@ -32,9 +39,19 @@ export async function contarFotoEstatica(
   formData.append('seleccion_h', String(seleccion.h));
   const url = `${BACKEND_URL}/count-image`;
   console.log(`[Foto directa] Enviando imagen a ${url}`);
-  const response = await fetch(url, { method: 'POST', body: formData });
-  if (!response.ok) throw new Error(`Error ${response.status}`);
-  const data = await response.json();
+  const controlador = new AbortController();
+  const timeout = setTimeout(() => controlador.abort(), 120_000);
+  let data: any;
+  try {
+    const response = await fetch(url, { method: 'POST', body: formData, signal: controlador.signal });
+    if (!response.ok) throw new Error(`Error ${response.status}`);
+    data = await response.json();
+  } catch (error: any) {
+    if (error?.name === 'AbortError') throw new Error('El backend tardó más de 120 segundos en responder.');
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   return {
     total: data.total ?? 0,
@@ -46,5 +63,10 @@ export async function contarFotoEstatica(
     imagenMosaicos: data.imagen_mosaicos_base64
       ? `data:image/jpeg;base64,${data.imagen_mosaicos_base64}`
       : null,
+    diagnostico: {
+      ruta: data.diagnostico?.ruta ?? 'desconocida',
+      mosaicos: data.diagnostico?.mosaicos ?? 0,
+      duracionSegundos: data.diagnostico?.duracion_segundos ?? 0,
+    },
   };
 }
