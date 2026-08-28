@@ -9,6 +9,7 @@ import { guardarReporte, persistirImagenReferencia } from '../db/client';
 import AppMenu from '../components/AppMenu';
 import ARView from '../components/ARView';
 import SaveReportModal from '../components/SaveReportModal';
+import ReferenceSelector, { type SeleccionReferencia } from '../components/ReferenceSelector';
 import {
   useDetection,
 } from '../hooks/useDetection';
@@ -29,6 +30,7 @@ export default function CameraScreen() {
   const [modalVisible, setModalVisible]     = useState(true);
   const [etapa, setEtapa]                   = useState<EtapaModal>('camara');
   const [fotoCapturada, setFotoCapturada]   = useState<string | null>(null);
+  const [seleccionReferencia, setSeleccionReferencia] = useState<SeleccionReferencia | null>(null);
   const [nombreUsuario, setNombreUsuario]   = useState('');
   const [claseYoloLocal, setClaseYoloLocal] = useState<string | null>(null);
   const [confianzaLocal, setConfianzaLocal] = useState<number | null>(null);
@@ -54,6 +56,7 @@ export default function CameraScreen() {
     limpiarReferencia();
     setEtapa('camara');
     setFotoCapturada(null);
+    setSeleccionReferencia(null);
     setNombreUsuario('');
     setClaseYoloLocal(null);
     setConfianzaLocal(null);
@@ -75,6 +78,7 @@ export default function CameraScreen() {
       const uri   = `file://${photo.path}`;
       console.log('[Camera] Foto de referencia capturada:', uri);
       setFotoCapturada(uri);
+      setSeleccionReferencia(null);
       setEtapa('nombrar');
     } catch (error) {
       console.log('[Camera] Error capturando foto de referencia:', error);
@@ -86,6 +90,7 @@ export default function CameraScreen() {
 
   const retomarFoto = () => {
     setFotoCapturada(null);
+    setSeleccionReferencia(null);
     setClaseYoloLocal(null);
     setConfianzaLocal(null);
     setReferenciaIdLocal(null);
@@ -94,12 +99,16 @@ export default function CameraScreen() {
 
   const confirmarNombreYBuscar = async () => {
     const nombre = nombreUsuario.trim();
-    if (!nombre || !fotoCapturada) return;
+    if (!nombre || !fotoCapturada || !seleccionReferencia) return;
+    if (seleccionReferencia.w < 0.02 || seleccionReferencia.h < 0.02) {
+      Alert.alert('Selecciona un ejemplar', 'Arrastra un rectángulo ajustado alrededor de un objeto completo.');
+      return;
+    }
 
     setEtapa('identificando');
     console.log(`[YOLO] Identificando referencia: "${nombre}"`);
     try {
-      const resultado = await identificarFoto(fotoCapturada, nombre);
+      const resultado = await identificarFoto(fotoCapturada, nombre, seleccionReferencia);
       setClaseYoloLocal(resultado?.clase ?? null);
       setConfianzaLocal(resultado?.confianza ?? null);
       setReferenciaIdLocal(resultado?.referenciaId ?? null);
@@ -118,20 +127,34 @@ export default function CameraScreen() {
     const clase  = claseYoloLocal || nombre;
     confirmarObjeto(clase, nombre, fotoCapturada, referenciaIdLocal);
     console.log(`[Conteo] Referencia confirmada: nombre="${nombre}", clase="${clase}"`);
+    setResultadoFinal(null);
     setModalVisible(false);
-    setModoAR(true);
-    console.log('[AR] Iniciando sesión ARCore con una sola cámara.');
+    setModoAR(false);
   };
 
   const iniciarConteo = () => {
     console.log('[Conteo] Iniciando cámara y tracking.');
-    setModoAR(true);
+    startDetection(cameraRef);
   };
 
   const finalizarConteo = () => {
-    const totalFinal = 0;
+    const totalFinal = stopDetection();
+    console.log(`[Conteo] Sesión 2D finalizada. Total: ${totalFinal}`);
     setResultadoFinal(totalFinal);
     setReporteGuardado(false);
+  };
+
+  const iniciarAR = () => {
+    if (!objetoReferencia || isDetecting) return;
+    setModoAR(true);
+    console.log('[AR] Iniciando conteo espacial con ARCore.');
+  };
+
+  const cambiarReferencia = () => {
+    if (isDetecting) stopDetection();
+    setModoAR(false);
+    setResultadoFinal(null);
+    abrirModalReferencia();
   };
 
   const finalizarAR = (total: number) => {
@@ -192,9 +215,24 @@ export default function CameraScreen() {
           ref={cameraRef}
           style={styles.camera}
           device={device}
-          isActive={true}
-          photo={true}
+          isActive={!modalVisible && resultadoFinal === null}
+          photo
         />
+      )}
+
+      {!modalVisible && resultadoFinal === null && cajasGuardadas.length > 0 && (
+        <View style={styles.detectionLayer} pointerEvents="none">
+          {cajasGuardadas.map((caja) => (
+            <View key={caja.id} style={[styles.detectionBox, {
+              left: `${(caja.cx - caja.w / 2) * 100}%` as `${number}%`,
+              top: `${(caja.cy - caja.h / 2) * 100}%` as `${number}%`,
+              width: `${caja.w * 100}%` as `${number}%`,
+              height: `${caja.h * 100}%` as `${number}%`,
+            }]}>
+              <Text style={styles.detectionId}>#{caja.id}</Text>
+            </View>
+          ))}
+        </View>
       )}
 
       {!modalVisible && <View style={styles.menuButton}><AppMenu /></View>}
@@ -208,7 +246,7 @@ export default function CameraScreen() {
           {resultadoFinal !== null && (
             <Text style={styles.referenceCount}>{resultadoFinal} contados</Text>
           )}
-          <TouchableOpacity onPress={limpiarReferencia} style={styles.clearBtn}>
+          <TouchableOpacity onPress={cambiarReferencia} style={styles.clearBtn}>
             <Text style={styles.clearBtnText}>✕</Text>
           </TouchableOpacity>
         </View>
@@ -234,8 +272,13 @@ export default function CameraScreen() {
           onPress={isDetecting ? finalizarConteo : iniciarConteo}
           disabled={!objetoReferencia && !isDetecting}
         >
-          <Text style={styles.captureText}>{isDetecting ? 'Detener' : 'Contar'}</Text>
+          <Text style={styles.captureText}>{isDetecting ? 'Detener' : 'Contar 2D'}</Text>
         </Pressable>
+        {!isDetecting && (
+          <TouchableOpacity style={[styles.arBtn, !objetoReferencia && styles.disabledBtn]} onPress={iniciarAR} disabled={!objetoReferencia}>
+            <Text style={styles.arBtnText}>Contar AR</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {reporteGuardado && (
@@ -288,24 +331,24 @@ export default function CameraScreen() {
 
           {etapa === 'nombrar' && fotoCapturada && (
             <View style={styles.confirmContainer}>
-              <Image source={{ uri: fotoCapturada }} style={styles.confirmImage} />
-              <Text style={styles.confirmHint}>¿Cómo se llama este objeto?</Text>
+              <Text style={styles.selectorTitle}>Selecciona un ejemplar</Text>
+              <Text style={styles.confirmHint}>Arrastra un rectángulo ajustado alrededor de uno.</Text>
+              <ReferenceSelector uri={fotoCapturada} seleccion={seleccionReferencia} onSeleccion={setSeleccionReferencia} />
               <TextInput
                 style={styles.nameInput}
                 placeholder="Ej: tomate, llave, zanahoria..."
                 placeholderTextColor="#999"
                 value={nombreUsuario}
                 onChangeText={setNombreUsuario}
-                autoFocus
               />
               <View style={styles.confirmBtns}>
                 <TouchableOpacity style={styles.retakeBtn} onPress={retomarFoto}>
                   <Text style={styles.retakeBtnText}>🔄 Retomar</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.confirmBtn, !nombreUsuario.trim() && styles.confirmBtnDisabled]}
+                  style={[styles.confirmBtn, (!nombreUsuario.trim() || !seleccionReferencia) && styles.confirmBtnDisabled]}
                   onPress={confirmarNombreYBuscar}
-                  disabled={!nombreUsuario.trim()}
+                  disabled={!nombreUsuario.trim() || !seleccionReferencia}
                 >
                   <Text style={styles.confirmBtnText}>✅ Confirmar</Text>
                 </TouchableOpacity>
@@ -354,6 +397,9 @@ export default function CameraScreen() {
 const styles = StyleSheet.create({
   container:        { flex: 1, backgroundColor: '#000' },
   camera:           { flex: 1 },
+  detectionLayer: { ...StyleSheet.absoluteFillObject },
+  detectionBox: { position: 'absolute', borderWidth: 2, borderColor: '#4ADE80', backgroundColor: 'rgba(74,222,128,0.08)' },
+  detectionId: { position: 'absolute', top: -22, left: -2, color: '#10151c', backgroundColor: '#4ADE80', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4, fontSize: 11, fontWeight: '900' },
   menuButton: { position: 'absolute', top: 42, left: 10, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 22 },
   centered:         { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   message:          { fontSize: 16, textAlign: 'center', color: '#fff' },
@@ -401,6 +447,8 @@ const styles = StyleSheet.create({
   captureBtnActive: { backgroundColor: '#EF4444' },
   disabledBtn:      { backgroundColor: '#444' },
   captureText:      { fontWeight: '700', color: '#111', fontSize: 13 },
+  arBtn: { backgroundColor: '#185FA5', borderRadius: 24, paddingHorizontal: 15, paddingVertical: 13, minWidth: 82, alignItems: 'center' },
+  arBtnText: { color: '#fff', fontSize: 12, fontWeight: '800' },
   historyHint: {
     position: 'absolute', bottom: 132, left: 24, right: 24,
     alignItems: 'center',
@@ -439,6 +487,7 @@ const styles = StyleSheet.create({
     flex: 1, backgroundColor: '#111',
     alignItems: 'center', justifyContent: 'center', padding: 24,
   },
+  selectorTitle: { color: '#fff', fontSize: 24, fontWeight: '800', alignSelf: 'flex-start', marginBottom: 6 },
   confirmImage: {
     width: 220, height: 220, borderRadius: 16,
     marginBottom: 16, borderWidth: 2, borderColor: '#4ADE80',

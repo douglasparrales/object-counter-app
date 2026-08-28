@@ -1,7 +1,13 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import type { Camera } from 'react-native-vision-camera';
-import { BACKEND_URL } from '../config/backend';
+import type { SeleccionReferencia } from '../components/ReferenceSelector';
+import {
+  identificarReferencia,
+  proveedorBackend,
+  type DeteccionTiempoReal,
+  type ProveedorDeteccionTiempoReal,
+} from '../services/realtimeDetection';
 
 export type CajaGuardada = {
   id: number;
@@ -13,7 +19,7 @@ export type CajaGuardada = {
 };
 
 type Track = CajaGuardada & { vistas: number; confirmado: boolean; ultimoVisto: number };
-type DeteccionRemota = Omit<CajaGuardada, 'id'> & { confianza: number };
+type DeteccionRemota = DeteccionTiempoReal;
 
 export type ObjetoReferencia = {
   claseYolo: string;
@@ -33,7 +39,15 @@ const INTERVAL_MS = 400;
 const IOU_MINIMO = 0.18;
 const FRAMES_PARA_CONFIRMAR = 2;
 const TIEMPO_MAXIMO_PARA_ASOCIAR_MS = 2200;
-const TIEMPO_VISIBLE_EN_FRAME_MS = 1800;
+const VENTANA_CONTEO_ESTABLE = 15;
+
+function mediana(valores: number[]) {
+  const ordenados = [...valores].sort((a, b) => a - b);
+  const mitad = Math.floor(ordenados.length / 2);
+  return ordenados.length % 2
+    ? ordenados[mitad]
+    : Math.round((ordenados[mitad - 1] + ordenados[mitad]) / 2);
+}
 
 function distancia(a: CajaGuardada, b: DeteccionRemota) {
   return Math.hypot(a.cx - b.cx, a.cy - b.cy);
@@ -59,7 +73,7 @@ function limiteDistancia(a: CajaGuardada, b: DeteccionRemota) {
   return Math.max(0.045, Math.min(0.12, tamano * 0.75));
 }
 
-export function useDetection() {
+export function useDetection(proveedor: ProveedorDeteccionTiempoReal = proveedorBackend) {
   const [cajasGuardadas, setCajasGuardadas] = useState<CajaGuardada[]>([]);
   const [totalContado, setTotalContado] = useState(0);
   const [isDetecting, setIsDetecting] = useState(false);
@@ -73,38 +87,18 @@ export function useDetection() {
   const tracksRef = useRef<Track[]>([]);
   const siguienteIdRef = useRef(1);
   const totalRef = useRef(0);
+  const muestrasConteoRef = useRef<number[]>([]);
 
-  const enviarFoto = useCallback(async (uri: string, claseFiltro = '', referenciaId: string | null = null, modo = 'tiempo_real') => {
-    const formData = new FormData();
-    formData.append('file', { uri, type: 'image/jpeg', name: 'photo.jpg' } as any);
-    const parametros = new URLSearchParams();
-    if (claseFiltro) parametros.set('clase_filtro', claseFiltro);
-    if (referenciaId) parametros.set('referencia_id', referenciaId);
-    parametros.set('modo', modo);
-    const query = parametros.toString();
-    const url = `${BACKEND_URL}/detect${query ? `?${query}` : ''}`;
-    console.log(`[Backend] Enviando frame a ${url}`);
-    const response = await fetch(url, { method: 'POST', body: formData });
-    if (!response.ok) throw new Error(`Error ${response.status}`);
-    return response.json();
-  }, []);
-
-  const identificarFoto = useCallback(async (uri: string, promptEs = ''): Promise<ResultadoIdentificacion> => {
+  const identificarFoto = useCallback(async (uri: string, promptEs: string, seleccion: SeleccionReferencia): Promise<ResultadoIdentificacion> => {
     setIdentificando(true);
     try {
-      const formData = new FormData();
-      formData.append('file', { uri, type: 'image/jpeg', name: 'photo.jpg' } as any);
-      const url = `${BACKEND_URL}/identify?prompt=${encodeURIComponent(promptEs.trim())}`;
-      console.log(`[Backend] Enviando referencia a ${url}`);
-      const response = await fetch(url, { method: 'POST', body: formData });
-      if (!response.ok) throw new Error(`Error ${response.status}`);
-      const data = await response.json();
+      const data = await identificarReferencia(uri, promptEs, seleccion);
       if (data.exito && data.clase) {
         setClaseDetectada(data.clase);
-        return { exito: true, clase: data.clase, confianza: data.confianza ?? 0, referenciaId: data.referencia_id ?? null };
+        return data;
       }
       setClaseDetectada(null);
-      return { exito: false, clase: data.clase ?? null, confianza: data.confianza ?? 0, referenciaId: data.referencia_id ?? null };
+      return data;
     } catch (error: any) {
       console.log('[YOLO] Error identificando:', error?.message ?? error);
       return { exito: false, clase: null, confianza: 0, referenciaId: null };
@@ -115,10 +109,14 @@ export function useDetection() {
 
   const actualizarTracks = useCallback((detecciones: DeteccionRemota[]) => {
     const ahora = Date.now();
-    // Los tracks confirmados se conservan durante toda la sesión: el total
-    // no puede bajar sólo porque un objeto salió momentáneamente del encuadre.
-    const tracks = [...tracksRef.current];
+    // En 2D no existe información espacial suficiente para reconocer que un
+    // objeto que reaparece tras mover la cámara es el mismo objeto físico.
+    // Conservamos tracks recientes para estabilizar cajas, no para acumularlos.
+    const tracks = tracksRef.current.filter(
+      (track) => ahora - track.ultimoVisto <= TIEMPO_MAXIMO_PARA_ASOCIAR_MS,
+    );
     const tracksUsados = new Set<number>();
+    const tracksVistosAhora = new Set<number>();
 
     for (const deteccion of detecciones) {
       let mejorTrack: Track | undefined;
@@ -140,27 +138,38 @@ export function useDetection() {
       if (mejorTrack) {
         Object.assign(mejorTrack, deteccion, { ultimoVisto: ahora, vistas: mejorTrack.vistas + 1 });
         tracksUsados.add(mejorTrack.id);
+        tracksVistosAhora.add(mejorTrack.id);
       } else {
-        tracks.push({ id: siguienteIdRef.current++, ...deteccion, vistas: 1, confirmado: false, ultimoVisto: ahora });
+        const nuevoTrack: Track = { id: siguienteIdRef.current++, ...deteccion, vistas: 1, confirmado: false, ultimoVisto: ahora };
+        tracks.push(nuevoTrack);
+        tracksVistosAhora.add(nuevoTrack.id);
       }
     }
 
     for (const track of tracks) {
       if (!track.confirmado && track.vistas >= FRAMES_PARA_CONFIRMAR) {
         track.confirmado = true;
-        console.log(`[Tracking] Objeto estable confirmado #${track.id}. Total acumulado: ${tracks.filter((item) => item.confirmado).length}`);
+        console.log(`[Tracking] Objeto estable confirmado #${track.id}.`);
       }
     }
 
     tracksRef.current = tracks;
     const visibles = tracks
-      // Un track antiguo sirve para asociar la siguiente caja, pero no puede
-      // inflar el total mientras la cámara ya está mostrando otra posición.
-      .filter((track) => track.confirmado && ahora - track.ultimoVisto <= TIEMPO_VISIBLE_EN_FRAME_MS)
+      .filter((track) => track.confirmado && tracksVistosAhora.has(track.id))
       .map(({ vistas, confirmado, ultimoVisto, ...caja }) => caja);
-    // El total conserva los objetos únicos confirmados durante la sesión;
-    // las cajas visibles sólo funcionan como marcadores sobre la cámara.
-    totalRef.current = tracks.filter((track) => track.confirmado).length;
+    // Resultado 2D: mediana temporal de detecciones positivas. Un objeto que
+    // se pierde unos frames o una mancha ocasional no altera el resultado.
+    if (detecciones.length > 0) {
+      const totalAnterior = totalRef.current;
+      muestrasConteoRef.current.push(detecciones.length);
+      if (muestrasConteoRef.current.length > VENTANA_CONTEO_ESTABLE) {
+        muestrasConteoRef.current.shift();
+      }
+      totalRef.current = mediana(muestrasConteoRef.current);
+      if (totalRef.current !== totalAnterior) {
+        console.log(`[Conteo 2D] Estimación estable: ${totalRef.current} (${muestrasConteoRef.current.length} muestras).`);
+      }
+    }
     setCajasGuardadas(visibles);
     setTotalContado(totalRef.current);
   }, []);
@@ -171,6 +180,7 @@ export function useDetection() {
   }, []);
 
   const startDetection = useCallback((camRef: RefObject<Camera | null>) => {
+    if (isRunning.current) return;
     if (!camRef.current) {
       console.log('[Detección] No se puede iniciar: VisionCamera no está lista.');
       return;
@@ -181,6 +191,7 @@ export function useDetection() {
     tracksRef.current = [];
     siguienteIdRef.current = 1;
     totalRef.current = 0;
+    muestrasConteoRef.current = [];
     setCajasGuardadas([]);
     setTotalContado(0);
     setIsDetecting(true);
@@ -190,9 +201,12 @@ export function useDetection() {
       if (!isRunning.current || !cameraRef.current) return;
       try {
         const photo = await cameraRef.current.takePhoto({ quality: 0.5 } as any);
-        const data = await enviarFoto(`file://${photo.path}`, objetoReferencia?.claseYolo ?? '', objetoReferencia?.referenciaId ?? null);
+        const detecciones = await proveedor.detectar(
+          `file://${photo.path}`,
+          objetoReferencia?.claseYolo ?? '',
+          objetoReferencia?.referenciaId ?? null,
+        );
         if (!isRunning.current) return;
-        const detecciones = Array.isArray(data.objetos) ? data.objetos as DeteccionRemota[] : [];
         console.log(`[Detección] Frame recibido: ${detecciones.length} objetos.`);
         actualizarTracks(detecciones);
       } catch (error: any) {
@@ -202,39 +216,7 @@ export function useDetection() {
     };
 
     tick();
-  }, [actualizarTracks, enviarFoto, objetoReferencia]);
-
-  const contarFotoMasiva = useCallback(async (camRef: RefObject<Camera | null>) => {
-    if (!camRef.current) {
-      console.log('[Foto masiva] VisionCamera no está lista.');
-      return 0;
-    }
-    setIsDetecting(true);
-    setCajasGuardadas([]);
-    setTotalContado(0);
-    try {
-      console.log('[Foto masiva] Capturando foto de alta resolución...');
-      const photo = await camRef.current.takePhoto({ quality: 1 } as any);
-      const data = await enviarFoto(
-        `file://${photo.path}`,
-        objetoReferencia?.claseYolo ?? '',
-        objetoReferencia?.referenciaId ?? null,
-        'foto_masiva',
-      );
-      const detecciones = Array.isArray(data.objetos) ? data.objetos as DeteccionRemota[] : [];
-      const cajas = detecciones.map((deteccion, indice) => ({ ...deteccion, id: indice + 1 }));
-      setCajasGuardadas(cajas);
-      setTotalContado(cajas.length);
-      totalRef.current = cajas.length;
-      console.log(`[Foto masiva] Resultado final: ${cajas.length} objetos.`);
-      return cajas.length;
-    } catch (error: any) {
-      console.log('[Foto masiva] Error:', error?.message ?? error);
-      return 0;
-    } finally {
-      setIsDetecting(false);
-    }
-  }, [enviarFoto, objetoReferencia]);
+  }, [actualizarTracks, objetoReferencia, proveedor]);
 
   const stopDetection = useCallback(() => {
     isRunning.current = false;
@@ -246,10 +228,20 @@ export function useDetection() {
   }, []);
 
   const limpiarReferencia = useCallback(() => {
+    isRunning.current = false;
+    if (intervalRef.current) clearTimeout(intervalRef.current);
+    intervalRef.current = null;
+    tracksRef.current = [];
+    muestrasConteoRef.current = [];
     setObjetoReferencia(null);
     setCajasGuardadas([]);
     setTotalContado(0);
     setClaseDetectada(null);
+  }, []);
+
+  useEffect(() => () => {
+    isRunning.current = false;
+    if (intervalRef.current) clearTimeout(intervalRef.current);
   }, []);
 
   return {
@@ -263,7 +255,6 @@ export function useDetection() {
     identificarFoto,
     confirmarObjeto,
     startDetection,
-    contarFotoMasiva,
     stopDetection,
     limpiarReferencia,
   };

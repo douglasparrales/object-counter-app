@@ -41,11 +41,19 @@ function etiquetaCompatible(etiqueta: string, buscada: string) {
   return objetivo === 'ballpoint pen' && (detectada === 'pen' || detectada.includes('ballpoint'));
 }
 
+function categoriasAR(clase: string) {
+  const normalizada = normalizarEtiqueta(clase);
+  if (normalizada === 'ballpoint pen') return ['ballpoint pen', 'pen'];
+  if (normalizada === 'cell phone') return ['cell phone', 'phone', 'mobile phone'];
+  return [normalizada];
+}
+
 function EscenaAR(props?: any) {
   const config = props?.sceneNavigator?.viroAppProps;
   const objetos: Objeto3DAnclado[] = config?.objetosAnclados ?? [];
   const candidatosRef = useRef<Candidato[]>([]);
   const escenaRef = useRef<any>(null);
+  const ultimoAvisoSinPlanoRef = useRef(0);
 
   useEffect(() => {
     ViroMaterials.createMaterials({
@@ -64,7 +72,14 @@ function EscenaAR(props?: any) {
         caja.x + caja.width / 2,
         caja.y + caja.height / 2,
       );
-      if (!hitTests?.length) return;
+      if (!hitTests?.length) {
+        const ahora = Date.now();
+        if (ahora - ultimoAvisoSinPlanoRef.current > 2000) {
+          ultimoAvisoSinPlanoRef.current = ahora;
+          console.log('[AR] Objeto detectado, pero su centro todavía no intersecta un plano horizontal.');
+        }
+        return;
+      }
 
       const [x, y, z] = hitTests[0].transform.position;
       const punto = { x, y, z };
@@ -95,6 +110,9 @@ function EscenaAR(props?: any) {
   }, [config, objetos]);
 
   const recibirDetecciones = useCallback(({ detections }: { detections: ViroDetectedObject[] }) => {
+    if (detections.length > 0) {
+      console.log(`[AR] YOLOE dirigido encontró ${detections.length} candidato(s): ${detections.map((item) => `${item.label} ${item.confidence.toFixed(2)}`).join(', ')}`);
+    }
     detections.forEach(procesarDeteccion);
   }, [procesarDeteccion]);
 
@@ -158,9 +176,11 @@ export default function ARView({
       />
       <ViroObjectDetector
         style={styles.detector}
-        model="yoloe-26n"
-        mode="prompt-free"
-        confidenceThreshold={0.28}
+        model="yoloe-counter-ar"
+        mode="text"
+        categories={categoriasAR(objetoReferencia.claseYolo)}
+        confidenceThreshold={0.16}
+        iouThreshold={0.45}
         maxFPS={4}
         maxDetections={12}
         projectToWorld={false}

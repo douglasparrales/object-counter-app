@@ -1,104 +1,291 @@
 # Object Counter App
 
-Aplicación móvil de Expo/React Native para seleccionar y contar un objeto con cámara, YOLO-World y tracking de IDs persistentes. El código de AR con Viro/ARCore se conserva como experimento visual, pero no forma parte del flujo de conteo actual.
+Aplicación móvil Android construida con Expo SDK 55 y React Native. Permite contar objetos desde una fotografía, realizar conteo 2D periódico con la cámara y experimentar con conteo AR mediante Viro/ARCore. El backend usa FastAPI, YOLO y YOLO-World.
+
+## Estado y alcance actual
+
+- **Conteo desde foto:** se toma una fotografía, se escribe el nombre del objeto y se dibuja un rectángulo alrededor de un ejemplar. El resultado puede corregirse antes de guardarlo.
+- **Conteo 2D:** se valida un ejemplar y luego se envían imágenes periódicas al backend. Las cajas se estabilizan temporalmente, pero un objeto que desaparece y vuelve a aparecer no conserva una identidad espacial garantizada.
+- **Conteo AR:** es un modo experimental visible en la aplicación. Requiere un teléfono compatible con ARCore y generar un modelo ONNX adicional antes de compilar la app.
+- **Reportes:** se guardan localmente en SQLite sólo cuando el usuario confirma el guardado.
+
+## Estructura del repositorio
+
+```text
+backend/             API FastAPI, detección y scripts de exportación
+object-counter-app/  aplicación Expo/React Native
+```
+
+Los pesos de YOLO (`*.pt`), el modelo AR (`*.onnx`), los entornos virtuales, `node_modules/` y las carpetas nativas generadas no se versionan. En una máquina limpia deben descargarse o generarse siguiendo esta guía.
 
 ## Requisitos
 
-- Node.js **20.19.x** y npm. El proyecto usa Expo SDK 54; evita Node 24 para Metro en este proyecto.
-- Android Studio, Android SDK y un dispositivo Android físico con depuración USB habilitada. La cámara no funciona de forma fiable en Expo Go ni en el emulador.
-- Python 3.10 a 3.12 para el backend.
-- El teléfono y el computador deben estar en la misma red Wi-Fi cuando se usa el backend por IP local.
+### Generales
 
-## Estructura
+- Git.
+- Conexión a Internet durante la preparación inicial para descargar paquetes, Gradle y pesos de los modelos.
+- Node.js **20.19.x** con npm. El proyecto usa Expo SDK **55**; evita Node 24 para este proyecto.
+- Python **3.10 a 3.12**.
+- Espacio disponible para dependencias, SDK de Android y modelos de IA.
 
-- `object-counter-app/`: aplicación móvil Expo.
-- `backend/`: API FastAPI y pesos de YOLO-World.
+### Android
 
-## 1. Preparar el backend
+- Android Studio con Android SDK Platform, Build-Tools, Platform-Tools (`adb`) y Command-line Tools.
+- JDK 17. Puede usarse el JDK incluido con Android Studio.
+- Variables de Android configuradas (`ANDROID_HOME` o `ANDROID_SDK_ROOT`) y `platform-tools` disponible en `PATH`.
+- Un dispositivo Android físico con opciones de desarrollador y depuración USB habilitadas.
+- Para **Contar AR**, un dispositivo compatible con ARCore y Google Play Services for AR instalado/actualizado.
 
-Desde la raíz del repositorio:
+La aplicación contiene módulos nativos (VisionCamera, Viro y TFLite), por lo que debe construirse con `expo run:android`. No se debe usar Expo Go. Para cámara y AR se recomienda un dispositivo físico.
+
+## Instalación en una máquina limpia
+
+Los comandos principales están escritos para Windows PowerShell. Al final de cada sección se indican las diferencias para macOS/Linux.
+
+### 1. Clonar y entrar al repositorio
+
+```powershell
+git clone URL_DEL_REPOSITORIO
+cd object-counter-app
+```
+
+Todos los comandos siguientes parten de la raíz, donde se encuentran `backend/` y `object-counter-app/`.
+
+### 2. Preparar el backend
+
+En PowerShell:
 
 ```powershell
 cd backend
-py -m venv .venv
+py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+cd ..
 ```
 
-Los pesos `yolov8s-worldv2.pt` ya están dentro de `backend/`. Si se eliminan, Ultralytics puede descargarlos la próxima vez que se inicie el backend.
+Si `py -3.12` no está disponible, usa `python -m venv .venv` con una versión compatible.
 
-La comparación visual de la foto de referencia requiere `opencv-python-headless` y `numpy`; están incluidos en `backend/requirements.txt`.
-
-Inicia la API así:
+Si PowerShell impide activar scripts, no es necesario cambiar permanentemente la política del sistema. Se pueden ejecutar los comandos con el Python del entorno:
 
 ```powershell
-uvicorn main:app --host 0.0.0.0 --port 8000
+.\backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
 ```
 
-El backend queda disponible en `http://IP_DEL_COMPUTADOR:8000`. Si Windows pregunta por el firewall, permite el acceso en redes privadas para Python/Uvicorn.
+En macOS/Linux:
 
-## 2. Configurar la IP del backend en el móvil
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+cd ..
+```
 
-Obtén la IPv4 del computador con:
+#### Pesos usados por el backend
+
+El repositorio no incluye `yolov8s-worldv2.pt` ni `yolov8n.pt`. Ultralytics los descarga automáticamente la primera vez que se inicia el backend. Esa primera carga puede tardar y necesita Internet; después quedarán en `backend/` para reutilizarse.
+
+Si se trabaja sin Internet, ambos archivos deben colocarse previamente dentro de `backend/` con esos nombres exactos.
+
+### 3. Generar el modelo del modo AR
+
+Este paso es necesario para que **Contar AR** funcione. Con el entorno Python del backend activo, desde la raíz ejecuta:
+
+```powershell
+python backend\tools\export_ar_model.py
+```
+
+En macOS/Linux:
+
+```bash
+python backend/tools/export_ar_model.py
+```
+
+El exportador descarga `yoloe-26n-seg.pt` la primera vez y crea:
+
+```text
+object-counter-app/assets/models/yoloe-counter-ar.onnx
+```
+
+La exportación puede tardar y Ultralytics puede solicitar dependencias adicionales de ONNX. Si lo hace, instala las dependencias indicadas y repite el comando. Confirma que el archivo ONNX exista antes de compilar Android.
+
+Si sólo se usarán **Conteo desde foto** y **Contar 2D**, este paso puede omitirse, pero **Contar AR** no tendrá un modelo funcional.
+
+### 4. Configurar la dirección del backend
+
+El teléfono y el computador deben estar en la misma red local. No uses `localhost` ni `127.0.0.1`: desde el teléfono apuntan al propio teléfono.
+
+En Windows, consulta la IPv4 del adaptador Wi-Fi o Ethernet activo:
 
 ```powershell
 ipconfig
 ```
 
-En `object-counter-app/hooks/useDetection.ts`, cambia `BACKEND_URL` por la IPv4 de tu computador, por ejemplo:
+Dentro de `object-counter-app/`, crea un archivo `.env`:
 
-```ts
-const BACKEND_URL = 'http://192.168.1.3:8000';
+```env
+EXPO_PUBLIC_BACKEND_URL=http://192.168.1.3:8000
 ```
 
-## 3. Instalar y ejecutar la app Android
+Sustituye `192.168.1.3` por la IPv4 real del computador y no añadas `/` al final.
 
-En otra terminal:
+La aplicación lee esta variable desde `object-counter-app/config/backend.ts`. Las variables `EXPO_PUBLIC_*` se incorporan al bundle: si cambia la IP, detén Metro y vuelve a iniciar o reconstruir la aplicación.
+
+Existe una IP predeterminada de desarrollo en el código, pero no debe suponerse válida en otra máquina; configura siempre `.env`.
+
+### 5. Instalar las dependencias de la app
+
+Desde la raíz:
 
 ```powershell
 cd object-counter-app
-npm install
+npm ci
+```
+
+Se usa `npm ci` porque el repositorio incluye `package-lock.json`. Usa `npm install` únicamente cuando se pretenda actualizar dependencias y el archivo lock.
+
+### 6. Preparar el dispositivo Android
+
+1. Abre Android Studio al menos una vez y completa la instalación del SDK solicitado.
+2. Acepta las licencias del SDK desde Android Studio.
+3. En el teléfono, activa **Opciones de desarrollador** y **Depuración USB**.
+4. Conecta el teléfono por USB y acepta la autorización de depuración.
+5. Comprueba la conexión:
+
+```powershell
+adb devices
+```
+
+El dispositivo debe aparecer con estado `device`, no `unauthorized` ni `offline`. Si hay varios dispositivos o emuladores, deja sólo el que usarás o selecciónalo cuando Expo lo solicite.
+
+### 7. Iniciar el backend
+
+Abre una terminal en la raíz del repositorio.
+
+Con el entorno activado:
+
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+python -m uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+Sin activar el entorno:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+En macOS/Linux:
+
+```bash
+cd backend
+source .venv/bin/activate
+python -m uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+Es importante iniciar Uvicorn desde `backend/`, porque `main.py` carga los modelos por nombre relativo. En el computador se puede comprobar FastAPI en:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+Desde otro dispositivo de la red debe ser accesible mediante:
+
+```text
+http://IP_DEL_COMPUTADOR:8000/docs
+```
+
+Si Windows muestra una solicitud del firewall, permite Python/Uvicorn en redes privadas. No expongas el puerto en redes públicas.
+
+### 8. Compilar e instalar la app Android
+
+Con el backend ejecutándose, abre otra terminal:
+
+```powershell
+cd object-counter-app
 npx expo run:android
 ```
-La app solicita permiso de cámara. Acéptalo en el teléfono.
 
-## Uso
+En una máquina limpia, Expo generará la carpeta nativa `android/`, ejecutará Gradle, copiará el modelo AR si fue generado e instalará el development build. La primera compilación tarda más porque descarga dependencias nativas.
 
-1. En el inicio, pulsa **Contar desde una foto** para el flujo directo: tomar foto → analizar → ver el total y las clases detectadas. No requiere referencia ni nombre.
-2. Para un objeto específico, entra a **Conteo en tiempo real**, pulsa **Qué contar**, toma una foto de referencia y escribe su nombre.
+Acepta el permiso de cámara cuando la aplicación lo solicite. Si cambias configuraciones nativas, plugins, iconos o el modelo AR, vuelve a ejecutar `npx expo run:android`; una recarga de Metro no aplica esos cambios al binario instalado.
+
+## Uso actual
+
+### Conteo desde foto
+
+1. Pulsa **Contar desde una foto**.
+2. Encuadra todos los objetos y toma una fotografía.
+3. Escribe el nombre del objeto que deseas contar.
+4. Dibuja un rectángulo ajustado alrededor de un ejemplar.
+5. Pulsa **Analizar**.
+6. Revisa las detecciones. Puedes eliminar una caja incorrecta o añadir manualmente un objeto omitido.
+7. Continúa y guarda el reporte sólo si deseas conservarlo.
+
+### Conteo 2D
+
+1. Entra a **Conteo en tiempo real** y pulsa **Qué contar**.
+2. Toma una foto de referencia, escribe el nombre y selecciona el ejemplar.
 3. La app envía la referencia a `POST /identify` para validarla.
-4. Pulsa **Contar** y elige un modo:
-   - **Tiempo real**: para objetos separados y visibles en cámara. Cada objeto recibe una caja verde y un ID.
-   - **Foto masiva**: para muchos objetos pequeños o juntos (tornillos, caramelos, bolichas). Toma una foto de alta calidad y la analiza a mayor resolución.
-5. Al detener, revisa el total, escribe opcionalmente el lugar (por ejemplo, `Lab 1`) y pulsa **Guardar** sólo si deseas conservar el reporte.
-6. Desliza la pantalla de cámara hacia la izquierda para ver los reportes guardados.
+4. Pulsa **Contar 2D** y mantén los objetos visibles con la cámara relativamente estable.
+5. Detén el conteo, revisa el total y guarda opcionalmente el reporte.
 
-El menú lateral (ícono de tres líneas) también permite acceder a Reportes, Acerca de y la versión de la app.
+### Conteo AR experimental
 
-La foto directa reconoce primero las clases comunes de YOLO (COCO) y, si no encuentra ninguna, intenta categorías de objetos pequeños como bolígrafo, tornillo, caramelo, bolicha, moneda y llave. Para un tipo de objeto que no esté en esas categorías, usa el flujo con foto de referencia y nombre.
+1. Selecciona y valida primero el objeto de referencia.
+2. Pulsa **Contar AR**.
+3. Mueve lentamente el dispositivo para que ARCore detecte un plano horizontal.
+4. Este modo usa el modelo ONNX generado durante la preparación. Su precisión y compatibilidad dependen del dispositivo.
 
-## Logs para diagnosticar
+Desliza la pantalla de cámara hacia la izquierda o usa el menú lateral para consultar los reportes guardados.
 
-- En la terminal del backend aparecen las peticiones, la traducción/etiquetas enviadas a YOLO, el número de objetos y la duración.
-- En la consola de Metro aparecen mensajes con los prefijos `[Camera]`, `[YOLO]`, `[Backend]`, `[Detección]` y `[Tracking]`.
-- Cuando un objeto pasa dos frames consecutivos con una posición compatible, aparece el mensaje `[Tracking] Objeto confirmado #...` y el contador aumenta.
+## Red e Internet
 
-## Cómo funciona YOLO-World y limitación actual
+- El teléfono debe poder alcanzar el puerto `8000` del computador.
+- Algunas redes empresariales, universitarias o de invitados aíslan los dispositivos aunque estén en el mismo Wi-Fi.
+- Si la IP cambia por DHCP, actualiza `EXPO_PUBLIC_BACKEND_URL` y reinicia/reconstruye la app.
+- La traducción de nombres no incluidos en los alias locales usa `deep-translator` y puede necesitar Internet durante el uso. Los términos en inglés reducen esa dependencia.
 
-YOLO-World es un detector por texto: utiliza el nombre del objeto como etiqueta y no aprende visualmente una clase nueva a partir de una única foto de referencia. La foto actual valida que el objeto y el texto coinciden; no es un entrenamiento ni una comparación imagen-a-imagen.
+## Solución de problemas
 
-Por ejemplo, `esfero` se normaliza a `ballpoint pen` y `pen`, porque traducirlo literalmente como `sphere` produce una etiqueta equivocada. Para objetos muy específicos, escribe una etiqueta común y concreta en español o inglés. Ningún detector general garantiza reconocer literalmente cualquier objeto desconocido sólo con una imagen de referencia.
+### La app no conecta con el backend
 
-## Tracking y límites conocidos
+- Confirma que Uvicorn esté iniciado con `--host 0.0.0.0`.
+- Comprueba que la IP de `.env` sea la del adaptador activo.
+- Abre `http://IP_DEL_COMPUTADOR:8000/docs` desde el navegador del teléfono.
+- Revisa el firewall y confirma que la red no aísle los dispositivos.
+- Después de modificar `.env`, reinicia Metro o reconstruye la app.
 
-El conteo actual usa VisionCamera para capturar frames, YOLO-World para localizar candidatos por nombre y una comparación visual entre cada caja y la foto de referencia. El backend descarta cajas con una apariencia distinta y elimina cajas solapadas antes de enviarlas al móvil. En tiempo real sólo se muestran cajas vistas en el frame reciente, para que una posición anterior no se sume a la actual cuando la cámara se mueve.
+### `adb devices` muestra `unauthorized`
 
-## Icono y desarrollo Android
+Desconecta y conecta el cable, desbloquea el teléfono y acepta la huella RSA. También puede ser necesario revocar las autorizaciones de depuración USB y autorizar nuevamente.
 
-El icono ya está configurado en `app.json`. Si el teléfono sigue mostrando el icono por defecto de React Native, corresponde al binario Android ya instalado: desinstala esa app del dispositivo y vuelve a generar/instalar el desarrollo con `npx expo run:android`. Los cambios de icono no se aplican sólo recargando Metro.
+### PowerShell no permite activar `.venv`
 
-Para contar con precisión, mantén todos los objetos a contar visibles y la cámara relativamente estable hasta que el total se estabilice. Si se necesita recorrer un espacio moviendo la cámara y conservar identidad tras perder de vista objetos, hace falta una integración AR real o comparación visual por embeddings; no se puede prometer esa garantía sólo con cajas 2D.
+Usa directamente `.\backend\.venv\Scripts\python.exe`, como se muestra en los pasos anteriores, sin cambiar permanentemente la política del sistema.
 
-## Reportes y auditoría local
+### Fallan o faltan los modelos
 
-Los reportes se guardan sólo al confirmarlo el usuario. SQLite guarda la sesión (objeto, clase YOLO, ubicación, total y fechas), el resultado asociado y un evento `REPORTE_GUARDADO` en la tabla de auditoría. La foto de referencia se copia al directorio de documentos de la app antes de guardar para que siga disponible en el historial.
+- Backend: confirma que la primera ejecución tenga Internet y permisos para escribir en `backend/`.
+- AR: ejecuta `python backend\tools\export_ar_model.py` y confirma que exista `object-counter-app/assets/models/yoloe-counter-ar.onnx` antes de compilar.
+
+### El icono o los cambios nativos no aparecen
+
+Desinstala el development build anterior y ejecuta nuevamente `npx expo run:android`. Los cambios nativos no se aplican sólo recargando JavaScript.
+
+## Logs y limitaciones
+
+- El backend registra peticiones, etiquetas enviadas a YOLO, resultados y duración.
+- Metro muestra mensajes con prefijos como `[Camera]`, `[YOLO]`, `[Backend]`, `[Detección]`, `[Tracking]` y `[AR]`.
+- Cuando un objeto cumple la estabilidad temporal aparece `[Tracking] Objeto estable confirmado #...`.
+- YOLO-World utiliza el nombre como etiqueta; una foto de referencia no entrena una clase nueva.
+- La comparación visual ayuda a filtrar candidatos, pero no garantiza reconocer cualquier objeto desconocido.
+- El conteo 2D no conserva identidad real cuando un objeto sale de escena y reaparece. Para esa garantía se necesita información espacial AR o reidentificación más avanzada.
+
+## Datos locales
+
+SQLite almacena las sesiones guardadas, resultados y eventos de auditoría. Las fotografías confirmadas se copian al directorio de documentos de la aplicación para que continúen disponibles en el historial. Estos datos permanecen en el dispositivo y pueden perderse al borrar sus datos o desinstalar la aplicación.

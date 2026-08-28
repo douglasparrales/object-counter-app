@@ -158,4 +158,5 @@ backend/__pycache__
 yolov8n_saved_model/
 *.pt
 *.onnx
+backend/mobileclip2_b.ts
 calibration_image_sample*

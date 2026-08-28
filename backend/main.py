@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO, YOLOWorld
 from routes.static_count import crear_router as crear_router_conteo_estatico
 from services.static_counter import StaticImageCounter
+from services.visual_reference import crear_perfil_visual, detectar_por_perfil
 from deep_translator import GoogleTranslator
 import io
 import time
@@ -10,7 +11,7 @@ import traceback
 import unicodedata
 import uuid
 from threading import Lock
-from PIL import Image
+from PIL import Image, ImageOps
 import cv2
 import numpy as np
 
@@ -145,6 +146,7 @@ def guardar_referencia_visual(image: Image.Image, caja: tuple[float, float, floa
         # Si YOLO no localizó la referencia, su foto incluye fondo además del
         # objeto: compararla contra una caja genera falsos negativos.
         "usar_similitud": caja is not None,
+        "perfil_apariencia": crear_perfil_visual(image, caja) if caja is not None else None,
     }
     while len(referencias_visuales) > MAX_REFERENCIAS_EN_MEMORIA:
         referencias_visuales.pop(next(iter(referencias_visuales)))
@@ -184,7 +186,11 @@ def traducir_a_ingles(palabra_es: str) -> str:
 @app.post("/identify")
 async def identify(
     file: UploadFile = File(...),
-    prompt: str = Query(default="")  # Llega en ESPAÑOL, ej: "tomate"
+    prompt: str = Query(default=""),
+    seleccion_x: float | None = Query(default=None),
+    seleccion_y: float | None = Query(default=None),
+    seleccion_w: float | None = Query(default=None),
+    seleccion_h: float | None = Query(default=None),
 ):
     t0 = time.time()
     print(f"\n📥 [/identify] Nueva petición recibida | Imagen: '{file.filename}' | Prompt: '{prompt}'")
@@ -192,7 +198,7 @@ async def identify(
     # 1. Cargar e interpretar la imagen
     try:
         contents = await file.read()
-        image = Image.open(io.BytesIO(contents)).convert("RGB")
+        image = ImageOps.exif_transpose(Image.open(io.BytesIO(contents))).convert("RGB")
         print(f"🖼️ [/identify] Imagen cargada correctamente. Dimensiones: {image.size[0]}x{image.size[1]}px")
     except Exception as e:
         print(f"❌ [/identify ERROR] Error al abrir/procesar la imagen enviada: {e}")
@@ -201,8 +207,34 @@ async def identify(
     # 2. Preparar clases para YOLO
     prompt_es = normalizar(prompt)
     prompt_en, candidatos = obtener_candidatos(prompt_es)
+    seleccion = None
+    valores_seleccion = (seleccion_x, seleccion_y, seleccion_w, seleccion_h)
+    if any(valor is not None for valor in valores_seleccion) and not all(valor is not None for valor in valores_seleccion):
+        raise HTTPException(status_code=422, detail="La selección visual está incompleta.")
+    if all(valor is not None for valor in valores_seleccion):
+        x, y, w, h = (float(valor) for valor in valores_seleccion)
+        if w > 0 and h > 0 and x >= 0 and y >= 0 and x + w <= 1 and y + h <= 1:
+            seleccion = (x * image.width, y * image.height, (x + w) * image.width, (y + h) * image.height)
+        else:
+            raise HTTPException(status_code=422, detail="La selección visual no es válida.")
 
     print(f"🎯 [/identify] Clases enviadas a YOLO: {candidatos}")
+
+    # Una selección explícita es una referencia más fiable que intentar que
+    # un vocabulario abierto reconozca primero objetos pequeños o regionalismos.
+    if seleccion is not None:
+        referencia_id = guardar_referencia_visual(image, seleccion)
+        duracion = round(time.time() - t0, 3)
+        clase_referencia = candidatos[0] if candidatos else (prompt_es or "objeto")
+        print(f"✅ [/identify RESULTADO] Referencia visual seleccionada | Clase: '{clase_referencia}' | Tiempo: {duracion}s")
+        return {
+            "exito": True,
+            "clase": clase_referencia,
+            "traduccion": prompt_en,
+            "confianza": 1.0,
+            "referencia_id": referencia_id,
+            "ruta": "seleccion_visual",
+        }
 
     # 3. Correr la inferencia en YOLO
     try:
@@ -230,7 +262,7 @@ async def identify(
 
     # 5. Evaluación de resultados
     if not clase_detectada or mejor_conf < 0.10:
-        referencia_id = guardar_referencia_visual(image, None)
+        referencia_id = guardar_referencia_visual(image, seleccion)
         print(f"⚠️ [/identify RESULTADO] Objeto '{prompt_es}' NO encontrado. Máxima confianza: {round(mejor_conf, 3)} | Tiempo: {duracion}s")
         return {
             "exito": False,
@@ -244,7 +276,7 @@ async def identify(
         }
 
     print(f"💡 [/identify RESULTADO] ÉXITO -> Detectado: '{clase_detectada}' con confianza {round(mejor_conf, 3)} | Tiempo: {duracion}s")
-    referencia_id = guardar_referencia_visual(image, mejor_caja)
+    referencia_id = guardar_referencia_visual(image, seleccion or mejor_caja)
     return {
         "exito": True,
         "clase": clase_detectada,
@@ -265,7 +297,7 @@ async def detect(
     print(f"\n📥 [/detect] Nuevo frame | Filtro: '{clase_filtro}'")
     try:
         contents = await file.read()
-        image = Image.open(io.BytesIO(contents)).convert("RGB")
+        image = ImageOps.exif_transpose(Image.open(io.BytesIO(contents))).convert("RGB")
     except Exception as e:
         print(f"❌ [/detect ERROR] Error leyendo la imagen del frame: {e}")
         raise HTTPException(status_code=400, detail="No se pudo leer la imagen enviada.")
@@ -276,20 +308,31 @@ async def detect(
     referencia_registro = referencias_visuales.get(referencia_id)
     referencia = referencia_registro["descriptor"] if referencia_registro else None
     usar_similitud = bool(referencia_registro and referencia_registro["usar_similitud"])
+    perfil_apariencia = referencia_registro.get("perfil_apariencia") if referencia_registro else None
     if referencia_id and referencia is None:
         print("[REFERENCIA] ID no disponible; se usará sólo el filtro de YOLO.")
     print(f"🎯 [/detect] Clases enviadas a YOLO: {candidatos}")
 
+    candidatos_apariencia = detectar_por_perfil(image, perfil_apariencia, candidatos[0]) if perfil_apariencia else []
     try:
         # Una foto masiva conserva más detalle para objetos pequeños; el modo
         # tiempo real sigue siendo más rápido para la cámara en vivo.
         imgsz = 960 if modo == "foto_masiva" else 640
-        results = ejecutar_inferencia(image, candidatos, confianza=0.06, imgsz=imgsz)
+        results = [] if candidatos_apariencia else ejecutar_inferencia(image, candidatos, confianza=0.06, imgsz=imgsz)
     except Exception as e:
         print(f"❌ [/detect ERROR] Fallo en la inferencia del loop: {e}")
         return {"objetos": []}
 
-    candidatos_detectados = []
+    candidatos_detectados = [{
+        "clase": nombre,
+        "cx": round(((x1 + x2) / 2) / img_w, 4),
+        "cy": round(((y1 + y2) / 2) / img_h, 4),
+        "w": round((x2 - x1) / img_w, 4),
+        "h": round((y2 - y1) / img_h, 4),
+        "confianza": round(confianza, 3),
+        "similitud_referencia": 1.0,
+        "caja_px": (x1, y1, x2, y2),
+    } for nombre, confianza, (x1, y1, x2, y2) in candidatos_apariencia]
     for result in results:
         for box in result.boxes:
             conf = float(box.conf[0])
@@ -337,7 +380,8 @@ async def detect(
 
     # Imprime un resumen corto en una sola línea por cada frame
     duracion = round(time.time() - t0, 3)
-    print(f"🔍 [/detect RESULTADO] Filtro: '{clase}' | Objetos: {len(objetos)} | Tiempo: {duracion}s")
+    ruta = "apariencia" if perfil_apariencia else "yolo"
+    print(f"🔍 [/detect RESULTADO] Filtro: '{clase}' | Objetos: {len(objetos)} | Ruta: {ruta} | Tiempo: {duracion}s")
 
     return {"objetos": objetos}
 

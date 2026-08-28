@@ -43,6 +43,7 @@
         }
       ],
       "@reactvision/react-viro-onnx",
+      "./plugins/withCounterArModel",
       [
         "react-native-vision-camera",
         {
