@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   StyleSheet, View, Text, Pressable, TouchableOpacity,
-  Image, ActivityIndicator, Modal, TextInput, Alert,
+  Image, ActivityIndicator, Modal, TextInput, Alert, PanResponder,
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import { useRouter } from 'expo-router';
@@ -38,6 +38,10 @@ export default function CameraScreen() {
   const [resultadoFinal, setResultadoFinal] = useState<number | null>(null);
   const [reporteGuardado, setReporteGuardado] = useState(false);
   const [tamanoPreview, setTamanoPreview] = useState({ width: 0, height: 0 });
+  const gestoHistorial = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gesto) => gesto.dx < -25 && Math.abs(gesto.dx) > Math.abs(gesto.dy),
+    onPanResponderRelease: (_, gesto) => { if (gesto.dx < -80) router.push('/history'); },
+  }), [router]);
 
   const {
     totalContado,
@@ -190,7 +194,7 @@ export default function CameraScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} {...gestoHistorial.panHandlers}>
       {!modalVisible && resultadoFinal === null && (
         <Camera
           ref={cameraRef}
@@ -199,6 +203,7 @@ export default function CameraScreen() {
           isActive={!modalVisible && resultadoFinal === null}
           photo
           resizeMode="cover"
+          outputOrientation="preview"
           onLayout={({ nativeEvent }) => setTamanoPreview(nativeEvent.layout)}
         />
       )}
@@ -301,6 +306,7 @@ export default function CameraScreen() {
                 device={device}
                 isActive={modalVisible && etapa === 'camara'}
                 photo={true}
+                outputOrientation="preview"
               />
               <View style={styles.modalMenu}><AppMenu /></View>
               <Text style={styles.modalHint}>Encuadra el objeto que quieres contar</Text>
