@@ -7,7 +7,6 @@ import { Camera, useCameraDevice, useCameraPermission } from 'react-native-visio
 import { useRouter } from 'expo-router';
 import { guardarReporte, persistirImagenReferencia } from '../db/client';
 import AppMenu from '../components/AppMenu';
-import ARView from '../components/ARView';
 import SaveReportModal from '../components/SaveReportModal';
 import ReferenceSelector, { type SeleccionReferencia } from '../components/ReferenceSelector';
 import {
@@ -38,7 +37,7 @@ export default function CameraScreen() {
   const [capturando, setCapturando]         = useState(false);
   const [resultadoFinal, setResultadoFinal] = useState<number | null>(null);
   const [reporteGuardado, setReporteGuardado] = useState(false);
-  const [modoAR, setModoAR] = useState(false);
+  const [tamanoPreview, setTamanoPreview] = useState({ width: 0, height: 0 });
 
   const {
     totalContado,
@@ -129,7 +128,6 @@ export default function CameraScreen() {
     console.log(`[Conteo] Referencia confirmada: nombre="${nombre}", clase="${clase}"`);
     setResultadoFinal(null);
     setModalVisible(false);
-    setModoAR(false);
   };
 
   const iniciarConteo = () => {
@@ -144,24 +142,10 @@ export default function CameraScreen() {
     setReporteGuardado(false);
   };
 
-  const iniciarAR = () => {
-    if (!objetoReferencia || isDetecting) return;
-    setModoAR(true);
-    console.log('[AR] Iniciando conteo espacial con ARCore.');
-  };
-
   const cambiarReferencia = () => {
     if (isDetecting) stopDetection();
-    setModoAR(false);
     setResultadoFinal(null);
     abrirModalReferencia();
-  };
-
-  const finalizarAR = (total: number) => {
-    console.log(`[AR] Sesión finalizada. Total anclado: ${total}`);
-    setModoAR(false);
-    setResultadoFinal(total);
-    setReporteGuardado(false);
   };
 
   const guardarConteo = async (ubicacion: string) => {
@@ -207,9 +191,6 @@ export default function CameraScreen() {
 
   return (
     <View style={styles.container}>
-      {modoAR && objetoReferencia ? (
-        <ARView objetoReferencia={objetoReferencia} onDetener={finalizarAR} />
-      ) : <>
       {!modalVisible && resultadoFinal === null && (
         <Camera
           ref={cameraRef}
@@ -217,19 +198,33 @@ export default function CameraScreen() {
           device={device}
           isActive={!modalVisible && resultadoFinal === null}
           photo
+          resizeMode="cover"
+          onLayout={({ nativeEvent }) => setTamanoPreview(nativeEvent.layout)}
         />
       )}
 
       {!modalVisible && resultadoFinal === null && cajasGuardadas.length > 0 && (
         <View style={styles.detectionLayer} pointerEvents="none">
           {cajasGuardadas.map((caja) => (
-            <View key={caja.id} style={[styles.detectionBox, {
-              left: `${(caja.cx - caja.w / 2) * 100}%` as `${number}%`,
-              top: `${(caja.cy - caja.h / 2) * 100}%` as `${number}%`,
-              width: `${caja.w * 100}%` as `${number}%`,
-              height: `${caja.h * 100}%` as `${number}%`,
-            }]}>
-              <Text style={styles.detectionId}>#{caja.id}</Text>
+            <View key={caja.id} style={[styles.detectionBox, (() => {
+              const escala = Math.max(
+                tamanoPreview.width / caja.frame_width,
+                tamanoPreview.height / caja.frame_height,
+              );
+              const anchoRender = caja.frame_width * escala;
+              const altoRender = caja.frame_height * escala;
+              const offsetX = (tamanoPreview.width - anchoRender) / 2;
+              const offsetY = (tamanoPreview.height - altoRender) / 2;
+              return {
+                left: offsetX + (caja.cx - caja.w / 2) * anchoRender,
+                top: offsetY + (caja.cy - caja.h / 2) * altoRender,
+                width: caja.w * anchoRender,
+                height: caja.h * altoRender,
+              };
+            })()]}>
+              <Text style={styles.detectionId} numberOfLines={1}>
+                #{caja.id} {Math.round(caja.confianza * 100)}%
+              </Text>
             </View>
           ))}
         </View>
@@ -272,13 +267,8 @@ export default function CameraScreen() {
           onPress={isDetecting ? finalizarConteo : iniciarConteo}
           disabled={!objetoReferencia && !isDetecting}
         >
-          <Text style={styles.captureText}>{isDetecting ? 'Detener' : 'Contar 2D'}</Text>
+          <Text style={styles.captureText}>{isDetecting ? 'Detener' : 'Contar'}</Text>
         </Pressable>
-        {!isDetecting && (
-          <TouchableOpacity style={[styles.arBtn, !objetoReferencia && styles.disabledBtn]} onPress={iniciarAR} disabled={!objetoReferencia}>
-            <Text style={styles.arBtnText}>Contar AR</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
       {reporteGuardado && (
@@ -287,7 +277,6 @@ export default function CameraScreen() {
         </View>
       )}
 
-      </>}
       <SaveReportModal
         visible={resultadoFinal !== null}
         total={resultadoFinal ?? 0}
@@ -398,8 +387,8 @@ const styles = StyleSheet.create({
   container:        { flex: 1, backgroundColor: '#000' },
   camera:           { flex: 1 },
   detectionLayer: { ...StyleSheet.absoluteFillObject },
-  detectionBox: { position: 'absolute', borderWidth: 2, borderColor: '#4ADE80', backgroundColor: 'rgba(74,222,128,0.08)' },
-  detectionId: { position: 'absolute', top: -22, left: -2, color: '#10151c', backgroundColor: '#4ADE80', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4, fontSize: 11, fontWeight: '900' },
+  detectionBox: { position: 'absolute', borderWidth: 2, borderColor: '#F59E0B', backgroundColor: 'rgba(245,158,11,0.08)' },
+  detectionId: { position: 'absolute', top: -22, left: -2, color: '#111', backgroundColor: '#F59E0B', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4, fontSize: 10, fontWeight: '900', minWidth: 58 },
   menuButton: { position: 'absolute', top: 42, left: 10, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 22 },
   centered:         { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   message:          { fontSize: 16, textAlign: 'center', color: '#fff' },
@@ -447,8 +436,6 @@ const styles = StyleSheet.create({
   captureBtnActive: { backgroundColor: '#EF4444' },
   disabledBtn:      { backgroundColor: '#444' },
   captureText:      { fontWeight: '700', color: '#111', fontSize: 13 },
-  arBtn: { backgroundColor: '#185FA5', borderRadius: 24, paddingHorizontal: 15, paddingVertical: 13, minWidth: 82, alignItems: 'center' },
-  arBtnText: { color: '#fff', fontSize: 12, fontWeight: '800' },
   historyHint: {
     position: 'absolute', bottom: 132, left: 24, right: 24,
     alignItems: 'center',

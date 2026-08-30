@@ -12,10 +12,13 @@ import {
 export type CajaGuardada = {
   id: number;
   clase: string;
+  confianza: number;
   cx: number;
   cy: number;
   w: number;
   h: number;
+  frame_width: number;
+  frame_height: number;
 };
 
 type Track = CajaGuardada & { vistas: number; confirmado: boolean; ultimoVisto: number };
@@ -39,7 +42,8 @@ const INTERVAL_MS = 400;
 const IOU_MINIMO = 0.18;
 const FRAMES_PARA_CONFIRMAR = 2;
 const TIEMPO_MAXIMO_PARA_ASOCIAR_MS = 2200;
-const VENTANA_CONTEO_ESTABLE = 15;
+const VENTANA_CONTEO_ESTABLE = 9;
+const SUAVIZADO_CAJA = 0.75;
 
 function mediana(valores: number[]) {
   const ordenados = [...valores].sort((a, b) => a - b);
@@ -47,6 +51,10 @@ function mediana(valores: number[]) {
   return ordenados.length % 2
     ? ordenados[mitad]
     : Math.round((ordenados[mitad - 1] + ordenados[mitad]) / 2);
+}
+
+function interpolar(actual: number, siguiente: number) {
+  return actual + (siguiente - actual) * SUAVIZADO_CAJA;
 }
 
 function distancia(a: CajaGuardada, b: DeteccionRemota) {
@@ -136,7 +144,20 @@ export function useDetection(proveedor: ProveedorDeteccionTiempoReal = proveedor
       }
 
       if (mejorTrack) {
-        Object.assign(mejorTrack, deteccion, { ultimoVisto: ahora, vistas: mejorTrack.vistas + 1 });
+        // El ID permanece asociado al objeto mientras la caja se desplaza de
+        // forma gradual. Esto evita el temblor visual sin alterar el conteo.
+        Object.assign(mejorTrack, {
+          clase: deteccion.clase,
+          confianza: deteccion.confianza,
+          cx: interpolar(mejorTrack.cx, deteccion.cx),
+          cy: interpolar(mejorTrack.cy, deteccion.cy),
+          w: interpolar(mejorTrack.w, deteccion.w),
+          h: interpolar(mejorTrack.h, deteccion.h),
+          frame_width: deteccion.frame_width,
+          frame_height: deteccion.frame_height,
+          ultimoVisto: ahora,
+          vistas: mejorTrack.vistas + 1,
+        });
         tracksUsados.add(mejorTrack.id);
         tracksVistosAhora.add(mejorTrack.id);
       } else {
@@ -210,7 +231,11 @@ export function useDetection(proveedor: ProveedorDeteccionTiempoReal = proveedor
         console.log(`[Detección] Frame recibido: ${detecciones.length} objetos.`);
         actualizarTracks(detecciones);
       } catch (error: any) {
-        console.log('[Detección] Error en frame:', error?.message ?? error);
+        // Detener desmonta la cámara mientras puede quedar una petición en
+        // vuelo. Su cancelación es esperada y no debe mostrarse como error.
+        if (isRunning.current) {
+          console.log('[Detección] Error en frame:', error?.message ?? error);
+        }
       }
       if (isRunning.current) intervalRef.current = setTimeout(tick, INTERVAL_MS);
     };

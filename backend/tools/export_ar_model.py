@@ -47,7 +47,7 @@ CLASES_AR = [
 
 RAIZ = Path(__file__).resolve().parents[2]
 DESTINO_PROYECTO = RAIZ / "object-counter-app" / "assets" / "models" / "yoloe-counter-ar.onnx"
-DESTINO_ANDROID = RAIZ / "object-counter-app" / "android" / "app" / "src" / "main" / "assets" / "yoloe-counter-ar.onnx"
+DESTINO_ANDROID = RAIZ / "object-counter-app" / "android" / "app" / "src" / "main" / "assets" / "models" / "yoloe-counter-ar.onnx"
 
 
 def main() -> None:

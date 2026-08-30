@@ -377,6 +377,11 @@ async def detect(
         objetos.append(candidato)
     for objeto in objetos:
         objeto.pop("caja_px")
+        # El preview móvil usa resizeMode="cover" y puede recortar los lados
+        # de la foto. Estas dimensiones permiten proyectar cada caja sobre la
+        # vista real sin asumir que ambas superficies tienen el mismo aspecto.
+        objeto["frame_width"] = img_w
+        objeto["frame_height"] = img_h
 
     # Imprime un resumen corto en una sola línea por cada frame
     duracion = round(time.time() - t0, 3)

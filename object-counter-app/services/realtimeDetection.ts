@@ -8,6 +8,8 @@ export type DeteccionTiempoReal = {
   cy: number;
   w: number;
   h: number;
+  frame_width: number;
+  frame_height: number;
 };
 
 export type ResultadoIdentificacionRemota = {
