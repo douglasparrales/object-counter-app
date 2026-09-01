@@ -1,12 +1,14 @@
 # Object Counter App
 
-Aplicación móvil Android construida con Expo SDK 55 y React Native. Permite contar objetos desde una fotografía, realizar conteo 2D periódico con la cámara y experimentar con conteo AR mediante Viro/ARCore. El backend usa FastAPI, YOLO y YOLO-World.
+Aplicación móvil Android construida con Expo SDK 55 y React Native. Permite contar objetos desde una fotografía y realizar conteo en tiempo real con estabilización temporal. El backend usa FastAPI, YOLO y YOLO-World.
+
+La rama `main` contiene la versión estable. El experimento de conteo espacial con ARCore nativo se desarrolla de forma aislada en `feature/arcore-native-counting` y todavía no forma parte del producto estable.
 
 ## Estado y alcance actual
 
 - **Conteo desde foto:** se toma una fotografía, se escribe el nombre del objeto y se dibuja un rectángulo alrededor de un ejemplar. El resultado puede corregirse antes de guardarlo.
-- **Conteo 2D:** se valida un ejemplar y luego se envían imágenes periódicas al backend. Las cajas se estabilizan temporalmente, pero un objeto que desaparece y vuelve a aparecer no conserva una identidad espacial garantizada.
-- **Conteo AR:** es un modo experimental visible en la aplicación. Requiere un teléfono compatible con ARCore y generar un modelo ONNX adicional antes de compilar la app.
+- **Conteo en tiempo real (estable):** se valida un ejemplar y se analizan imágenes periódicas. El total usa consenso temporal para evitar que cambios momentáneos o IDs inestables produzcan duplicados. Las cajas son una ayuda visual y no determinan el total.
+- **ARCore nativo (en desarrollo):** la rama `feature/arcore-native-counting` reemplaza el prototipo Viro por una Activity Android nativa. El primer hito valida compatibilidad, detección de planos y anclas persistentes; detección automática y deduplicación 3D aún están pendientes.
 - **Reportes:** se guardan localmente en SQLite sólo cuando el usuario confirma el guardado.
 
 ## Estructura del repositorio
@@ -16,7 +18,7 @@ backend/             API FastAPI, detección y scripts de exportación
 object-counter-app/  aplicación Expo/React Native
 ```
 
-Los pesos de YOLO (`*.pt`), el modelo AR (`*.onnx`), los entornos virtuales, `node_modules/` y las carpetas nativas generadas no se versionan. En una máquina limpia deben descargarse o generarse siguiendo esta guía.
+Los pesos de YOLO (`*.pt`), los entornos virtuales, `node_modules/` y las carpetas nativas generadas no se versionan. En una máquina limpia deben descargarse o generarse siguiendo esta guía.
 
 ## Requisitos
 
@@ -36,7 +38,7 @@ Los pesos de YOLO (`*.pt`), el modelo AR (`*.onnx`), los entornos virtuales, `no
 - Un dispositivo Android físico con opciones de desarrollador y depuración USB habilitadas.
 - Para **Contar AR**, un dispositivo compatible con ARCore y Google Play Services for AR instalado/actualizado.
 
-La aplicación contiene módulos nativos (VisionCamera, Viro y TFLite), por lo que debe construirse con `expo run:android`. No se debe usar Expo Go. Para cámara y AR se recomienda un dispositivo físico.
+La aplicación contiene módulos nativos (VisionCamera y, en la rama experimental, ARCore), por lo que debe construirse con `expo run:android`. No se debe usar Expo Go. Para cámara y AR se recomienda un dispositivo físico.
 
 ## Instalación en una máquina limpia
 
@@ -89,31 +91,7 @@ El repositorio no incluye `yolov8s-worldv2.pt` ni `yolov8n.pt`. Ultralytics los 
 
 Si se trabaja sin Internet, ambos archivos deben colocarse previamente dentro de `backend/` con esos nombres exactos.
 
-### 3. Generar el modelo del modo AR
-
-Este paso es necesario para que **Contar AR** funcione. Con el entorno Python del backend activo, desde la raíz ejecuta:
-
-```powershell
-python backend\tools\export_ar_model.py
-```
-
-En macOS/Linux:
-
-```bash
-python backend/tools/export_ar_model.py
-```
-
-El exportador descarga `yoloe-26n-seg.pt` la primera vez y crea:
-
-```text
-object-counter-app/assets/models/yoloe-counter-ar.onnx
-```
-
-La exportación puede tardar y Ultralytics puede solicitar dependencias adicionales de ONNX. Si lo hace, instala las dependencias indicadas y repite el comando. Confirma que el archivo ONNX exista antes de compilar Android.
-
-Si sólo se usarán **Conteo desde foto** y **Contar 2D**, este paso puede omitirse, pero **Contar AR** no tendrá un modelo funcional.
-
-### 4. Configurar la dirección del backend
+### 3. Configurar la dirección del backend
 
 El teléfono y el computador deben estar en la misma red local. No uses `localhost` ni `127.0.0.1`: desde el teléfono apuntan al propio teléfono.
 
@@ -135,7 +113,7 @@ La aplicación lee esta variable desde `object-counter-app/config/backend.ts`. L
 
 Existe una IP predeterminada de desarrollo en el código, pero no debe suponerse válida en otra máquina; configura siempre `.env`.
 
-### 5. Instalar las dependencias de la app
+### 4. Instalar las dependencias de la app
 
 Desde la raíz:
 
@@ -146,7 +124,7 @@ npm ci
 
 Se usa `npm ci` porque el repositorio incluye `package-lock.json`. Usa `npm install` únicamente cuando se pretenda actualizar dependencias y el archivo lock.
 
-### 6. Preparar el dispositivo Android
+### 5. Preparar el dispositivo Android
 
 1. Abre Android Studio al menos una vez y completa la instalación del SDK solicitado.
 2. Acepta las licencias del SDK desde Android Studio.
@@ -160,7 +138,7 @@ adb devices
 
 El dispositivo debe aparecer con estado `device`, no `unauthorized` ni `offline`. Si hay varios dispositivos o emuladores, deja sólo el que usarás o selecciónalo cuando Expo lo solicite.
 
-### 7. Iniciar el backend
+### 6. Iniciar el backend
 
 Abre una terminal en la raíz del repositorio.
 
@@ -201,7 +179,7 @@ http://IP_DEL_COMPUTADOR:8000/docs
 
 Si Windows muestra una solicitud del firewall, permite Python/Uvicorn en redes privadas. No expongas el puerto en redes públicas.
 
-### 8. Compilar e instalar la app Android
+### 7. Compilar e instalar la app Android
 
 Con el backend ejecutándose, abre otra terminal:
 
@@ -210,7 +188,7 @@ cd object-counter-app
 npx expo run:android
 ```
 
-En una máquina limpia, Expo generará la carpeta nativa `android/`, ejecutará Gradle, copiará el modelo AR si fue generado e instalará el development build. La primera compilación tarda más porque descarga dependencias nativas.
+En una máquina limpia, Expo generará la carpeta nativa `android/`, ejecutará Gradle e instalará el development build. La primera compilación tarda más porque descarga dependencias nativas.
 
 Acepta el permiso de cámara cuando la aplicación lo solicite. Si cambias configuraciones nativas, plugins, iconos o el modelo AR, vuelve a ejecutar `npx expo run:android`; una recarga de Metro no aplica esos cambios al binario instalado.
 
@@ -226,20 +204,17 @@ Acepta el permiso de cámara cuando la aplicación lo solicite. Si cambias confi
 6. Revisa las detecciones. Puedes eliminar una caja incorrecta o añadir manualmente un objeto omitido.
 7. Continúa y guarda el reporte sólo si deseas conservarlo.
 
-### Conteo 2D
+### Conteo en tiempo real
 
 1. Entra a **Conteo en tiempo real** y pulsa **Qué contar**.
 2. Toma una foto de referencia, escribe el nombre y selecciona el ejemplar.
 3. La app envía la referencia a `POST /identify` para validarla.
-4. Pulsa **Contar 2D** y mantén los objetos visibles con la cámara relativamente estable.
+4. Pulsa **Contar** y mueve la cámara lentamente. El consenso temporal conserva el total estable ante pérdidas breves de detección.
 5. Detén el conteo, revisa el total y guarda opcionalmente el reporte.
 
-### Conteo AR experimental
+### ARCore nativo experimental
 
-1. Selecciona y valida primero el objeto de referencia.
-2. Pulsa **Contar AR**.
-3. Mueve lentamente el dispositivo para que ARCore detecte un plano horizontal.
-4. Este modo usa el modelo ONNX generado durante la preparación. Su precisión y compatibilidad dependen del dispositivo.
+Disponible únicamente al cambiar a `feature/arcore-native-counting`. Por ahora permite abrir una sesión AR nativa, detectar superficies y colocar anclas manuales. No debe presentarse todavía como conteo automático terminado.
 
 Desliza la pantalla de cámara hacia la izquierda o usa el menú lateral para consultar los reportes guardados.
 
@@ -270,8 +245,7 @@ Usa directamente `.\backend\.venv\Scripts\python.exe`, como se muestra en los pa
 
 ### Fallan o faltan los modelos
 
-- Backend: confirma que la primera ejecución tenga Internet y permisos para escribir en `backend/`.
-- AR: ejecuta `python backend\tools\export_ar_model.py` y confirma que exista `object-counter-app/assets/models/yoloe-counter-ar.onnx` antes de compilar.
+Confirma que la primera ejecución del backend tenga Internet y permisos para escribir en `backend/`.
 
 ### El icono o los cambios nativos no aparecen
 
@@ -284,7 +258,23 @@ Desinstala el development build anterior y ejecuta nuevamente `npx expo run:andr
 - Cuando un objeto cumple la estabilidad temporal aparece `[Tracking] Objeto estable confirmado #...`.
 - YOLO-World utiliza el nombre como etiqueta; una foto de referencia no entrena una clase nueva.
 - La comparación visual ayuda a filtrar candidatos, pero no garantiza reconocer cualquier objeto desconocido.
-- El conteo 2D no conserva identidad real cuando un objeto sale de escena y reaparece. Para esa garantía se necesita información espacial AR o reidentificación más avanzada.
+- El modo estable reduce duplicados mediante consenso temporal, pero no reconstruye el espacio físico. La garantía espacial fuera del encuadre es el objetivo de la rama ARCore nativa.
+
+## Desarrollo por ramas
+
+- `main`: aplicación estable (foto estática, conteo en tiempo real y reportes).
+- `feature/arcore-native-counting`: experimento ARCore nativo derivado de `main`.
+
+Publicación inicial de ambas ramas:
+
+```powershell
+git switch main
+git push -u origin main
+git switch feature/arcore-native-counting
+git push -u origin feature/arcore-native-counting
+```
+
+Cuando AR cumpla sus criterios de aceptación, actualiza ambas ramas y fusiona mediante un pull request de `feature/arcore-native-counting` hacia `main`. Antes de fusionar, resuelve conflictos en la rama de la característica y vuelve a validar la app; no trabajes directamente sobre `main`.
 
 ## Datos locales
 
