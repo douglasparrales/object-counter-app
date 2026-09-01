@@ -38,7 +38,7 @@ Los pesos de YOLO (`*.pt`), los entornos virtuales, `node_modules/` y las carpet
 - Un dispositivo Android físico con opciones de desarrollador y depuración USB habilitadas.
 - Para **Contar AR**, un dispositivo compatible con ARCore y Google Play Services for AR instalado/actualizado.
 
-La aplicación contiene módulos nativos (VisionCamera y, en la rama experimental, ARCore), por lo que debe construirse con `expo run:android`. No se debe usar Expo Go. Para cámara y AR se recomienda un dispositivo físico.
+La aplicación contiene módulos nativos, por lo que debe construirse con `expo run:android`. No se debe usar Expo Go y se recomienda un dispositivo físico. `main` conserva dependencias Viro/ONNX/TFLite del prototipo anterior aunque ya no expone ese modo en la pantalla; retirarlas es una limpieza técnica pendiente y no se necesita generar un modelo ONNX para usar las funciones estables.
 
 ## Instalación en una máquina limpia
 
@@ -264,6 +264,8 @@ Desinstala el development build anterior y ejecuta nuevamente `npx expo run:andr
 
 - `main`: aplicación estable (foto estática, conteo en tiempo real y reportes).
 - `feature/arcore-native-counting`: experimento ARCore nativo derivado de `main`.
+
+Deuda conocida de `main`: eliminar las dependencias nativas Viro/ONNX/TFLite que quedaron del prototipo AR anterior. No deben confundirse con la nueva implementación ARCore nativa ni implican que AR esté disponible en la versión estable.
 
 Publicación inicial de ambas ramas:
 
