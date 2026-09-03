@@ -38,7 +38,8 @@ export async function contarFotoEstatica(
   formData.append('seleccion_w', String(seleccion.w));
   formData.append('seleccion_h', String(seleccion.h));
   const baseUrl = await getBackendUrl();
-const url = `${baseUrl}/count-image`;
+  if (!baseUrl) throw new Error('Configura primero la dirección del backend.');
+  const url = `${baseUrl}/count-image`;
   console.log(`[Foto directa] Enviando imagen a ${url}`);
   const controlador = new AbortController();
   const timeout = setTimeout(() => controlador.abort(), 120_000);

@@ -101,17 +101,11 @@ En Windows, consulta la IPv4 del adaptador Wi-Fi o Ethernet activo:
 ipconfig
 ```
 
-Dentro de `object-counter-app/`, crea un archivo `.env`:
+En la app abre el menú, entra a la configuración del backend y escribe esa IPv4, por ejemplo `192.168.1.3`. La app agrega automáticamente `http://` y el puerto `8000`, guarda la dirección en el teléfono y la reutiliza en los siguientes inicios. También puedes escribir una URL completa con otro puerto.
 
-```env
-EXPO_PUBLIC_BACKEND_URL=http://192.168.1.3:8000
-```
+Después de iniciar el backend, usa **Probar conexión** en la app. No es necesario volver a generar la APK cuando cambia la IP.
 
-Sustituye `192.168.1.3` por la IPv4 real del computador y no añadas `/` al final.
-
-La aplicación lee esta variable desde `object-counter-app/config/backend.ts`. Las variables `EXPO_PUBLIC_*` se incorporan al bundle: si cambia la IP, detén Metro y vuelve a iniciar o reconstruir la aplicación.
-
-Existe una IP predeterminada de desarrollo en el código, pero no debe suponerse válida en otra máquina; configura siempre `.env`.
+Opcionalmente, `EXPO_PUBLIC_BACKEND_URL` permite definir una dirección inicial durante el build, pero la dirección guardada desde la app siempre tiene prioridad.
 
 ### 4. Instalar las dependencias de la app
 
@@ -222,7 +216,7 @@ Desliza la pantalla de cámara hacia la izquierda o usa el menú lateral para co
 
 - El teléfono debe poder alcanzar el puerto `8000` del computador.
 - Algunas redes empresariales, universitarias o de invitados aíslan los dispositivos aunque estén en el mismo Wi-Fi.
-- Si la IP cambia por DHCP, actualiza `EXPO_PUBLIC_BACKEND_URL` y reinicia/reconstruye la app.
+- Si la IP cambia por DHCP, actualízala desde la configuración de la app; no hace falta reconstruir la APK.
 - La traducción de nombres no incluidos en los alias locales usa `deep-translator` y puede necesitar Internet durante el uso. Los términos en inglés reducen esa dependencia.
 
 ## Solución de problemas
@@ -230,7 +224,7 @@ Desliza la pantalla de cámara hacia la izquierda o usa el menú lateral para co
 ### La app no conecta con el backend
 
 - Confirma que Uvicorn esté iniciado con `--host 0.0.0.0`.
-- Comprueba que la IP de `.env` sea la del adaptador activo.
+- Comprueba que la IP guardada en la configuración sea la del adaptador activo y usa **Probar conexión**.
 - Abre `http://IP_DEL_COMPUTADOR:8000/docs` desde el navegador del teléfono.
 - Revisa el firewall y confirma que la red no aísle los dispositivos.
 - Después de modificar `.env`, reinicia Metro o reconstruye la app.

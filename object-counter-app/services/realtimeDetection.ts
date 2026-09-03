@@ -1,4 +1,4 @@
-import { getBackendUrl } from '../config/backend';      
+import { getBackendUrl } from '../config/backend';
 import type { SeleccionReferencia } from '../components/ReferenceSelector';
 
 export type DeteccionTiempoReal = {
@@ -41,7 +41,8 @@ export const proveedorBackend: ProveedorDeteccionTiempoReal = {
     if (claseFiltro) parametros.set('clase_filtro', claseFiltro);
     if (referenciaId) parametros.set('referencia_id', referenciaId);
     const baseUrl = await getBackendUrl();
-const url = `${baseUrl}/detect?${parametros.toString()}`;
+    if (!baseUrl) throw new Error('Configura primero la dirección del backend.');
+    const url = `${baseUrl}/detect?${parametros.toString()}`;
     const response = await fetchConTimeout(url, { method: 'POST', body: formData });
     if (!response.ok) throw new Error(`Error ${response.status}`);
     const data = await response.json();
@@ -64,7 +65,8 @@ export async function identificarReferencia(
     seleccion_h: String(seleccion.h),
   });
   const baseUrl = await getBackendUrl();
-const url = `${baseUrl}/identify?${parametros.toString()}`;
+  if (!baseUrl) throw new Error('Configura primero la dirección del backend.');
+  const url = `${baseUrl}/identify?${parametros.toString()}`;
   const response = await fetchConTimeout(url, { method: 'POST', body: formData }, 60_000);
   if (!response.ok) throw new Error(`Error ${response.status}`);
   const data = await response.json();
