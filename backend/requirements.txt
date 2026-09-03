@@ -1,6 +1,19 @@
+# fastapi
+# uvicorn[standard]
+# python-multipart
+# ultralytics
+# pillow
+# deep-translator
+# opencv-python-headless
+# numpy
+
+# main
+
 fastapi
 uvicorn[standard]
 python-multipart
+torch --extra-index-url https://download.pytorch.org/whl/cpu
+torchvision --extra-index-url https://download.pytorch.org/whl/cpu
 ultralytics
 pillow
 deep-translator
