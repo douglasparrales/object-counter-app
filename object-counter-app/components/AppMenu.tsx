@@ -1,42 +1,73 @@
 import { useRef, useState } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { SettingsModal } from './SettingsModal';
 
 export default function AppMenu() {
   const router = useRouter();
   const [visible, setVisible] = useState(false);
+  const [settingsVisible, setSettingsVisible] = useState(false);
   const progreso = useRef(new Animated.Value(0)).current;
 
   const abrir = () => {
     setVisible(true);
     Animated.timing(progreso, { toValue: 1, duration: 220, useNativeDriver: true }).start();
   };
+
   const cerrar = (accion?: () => void) => {
     Animated.timing(progreso, { toValue: 0, duration: 180, useNativeDriver: true }).start(() => {
       setVisible(false);
       accion?.();
     });
   };
+
   const mover = (ruta: '/history' | '/about' | '/') => cerrar(() => router.push(ruta));
+
+  const abrirConfiguracion = () => {
+    cerrar(() => setSettingsVisible(true));
+  };
 
   return (
     <>
       <TouchableOpacity style={styles.trigger} onPress={abrir} accessibilityLabel="Abrir menú">
-        <View style={styles.line} /><View style={styles.line} /><View style={styles.line} />
+        <View style={styles.line} />
+        <View style={styles.line} />
+        <View style={styles.line} />
       </TouchableOpacity>
+
       <Modal visible={visible} transparent animationType="none" onRequestClose={() => cerrar()}>
         <View style={styles.overlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => cerrar()} />
           <Animated.View style={[styles.drawer, { transform: [{ translateX: progreso.interpolate({ inputRange: [0, 1], outputRange: [-300, 0] }) }] }]}>
             <Text style={styles.brand}>Object Counter</Text>
             <Text style={styles.subtitle}>Herramientas de conteo</Text>
-            <TouchableOpacity style={styles.item} onPress={() => mover('/history')}><Text style={styles.itemText}>▤  Reportes</Text></TouchableOpacity>
-            <TouchableOpacity style={styles.item} onPress={() => mover('/about')}><Text style={styles.itemText}>ⓘ  Acerca de</Text></TouchableOpacity>
-            <TouchableOpacity style={styles.item} onPress={() => mover('/')}><Text style={styles.itemText}>⌂  Inicio</Text></TouchableOpacity>
+            
+            <TouchableOpacity style={styles.item} onPress={() => mover('/')}>
+              <Text style={styles.itemText}>⌂   Inicio</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.item} onPress={() => mover('/history')}>
+              <Text style={styles.itemText}>▤   Reportes</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.item} onPress={abrirConfiguracion}>
+              <Text style={styles.itemText}>⚙   Configuración IP</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.item} onPress={() => mover('/about')}>
+              <Text style={styles.itemText}>ⓘ   Acerca de</Text>
+            </TouchableOpacity>
+
             <Text style={styles.version}>Versión 1.0.0</Text>
           </Animated.View>
         </View>
       </Modal>
+
+      {/* Modal de Configuración de IP */}
+      <SettingsModal
+        visible={settingsVisible}
+        onClose={() => setSettingsVisible(false)}
+      />
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { BACKEND_URL } from '../config/backend';
+import { getBackendUrl } from '../config/backend';      
 import type { SeleccionReferencia } from '../components/ReferenceSelector';
 
 export type DeteccionTiempoReal = {
@@ -40,7 +40,8 @@ export const proveedorBackend: ProveedorDeteccionTiempoReal = {
     const parametros = new URLSearchParams({ modo: 'tiempo_real' });
     if (claseFiltro) parametros.set('clase_filtro', claseFiltro);
     if (referenciaId) parametros.set('referencia_id', referenciaId);
-    const url = `${BACKEND_URL}/detect?${parametros.toString()}`;
+    const baseUrl = await getBackendUrl();
+const url = `${baseUrl}/detect?${parametros.toString()}`;
     const response = await fetchConTimeout(url, { method: 'POST', body: formData });
     if (!response.ok) throw new Error(`Error ${response.status}`);
     const data = await response.json();
@@ -62,7 +63,8 @@ export async function identificarReferencia(
     seleccion_w: String(seleccion.w),
     seleccion_h: String(seleccion.h),
   });
-  const url = `${BACKEND_URL}/identify?${parametros.toString()}`;
+  const baseUrl = await getBackendUrl();
+const url = `${baseUrl}/identify?${parametros.toString()}`;
   const response = await fetchConTimeout(url, { method: 'POST', body: formData }, 60_000);
   if (!response.ok) throw new Error(`Error ${response.status}`);
   const data = await response.json();

@@ -1,4 +1,4 @@
-import { BACKEND_URL } from '../config/backend';
+import { getBackendUrl } from '../config/backend';
 
 export type ObjetoConteoEstatico = {
   id: number;
@@ -37,7 +37,8 @@ export async function contarFotoEstatica(
   formData.append('seleccion_y', String(seleccion.y));
   formData.append('seleccion_w', String(seleccion.w));
   formData.append('seleccion_h', String(seleccion.h));
-  const url = `${BACKEND_URL}/count-image`;
+  const baseUrl = await getBackendUrl();
+const url = `${baseUrl}/count-image`;
   console.log(`[Foto directa] Enviando imagen a ${url}`);
   const controlador = new AbortController();
   const timeout = setTimeout(() => controlador.abort(), 120_000);
