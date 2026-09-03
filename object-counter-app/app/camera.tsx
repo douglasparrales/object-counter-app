@@ -9,6 +9,7 @@ import { guardarReporte, persistirImagenReferencia } from '../db/client';
 import AppMenu from '../components/AppMenu';
 import SaveReportModal from '../components/SaveReportModal';
 import ReferenceSelector, { type SeleccionReferencia } from '../components/ReferenceSelector';
+import { abrirPruebaAnclasArCore, comprobarCompatibilidadArCore } from '../services/nativeArCore';
 import {
   useDetection,
 } from '../hooks/useDetection';
@@ -37,6 +38,7 @@ export default function CameraScreen() {
   const [capturando, setCapturando]         = useState(false);
   const [resultadoFinal, setResultadoFinal] = useState<number | null>(null);
   const [reporteGuardado, setReporteGuardado] = useState(false);
+  const [arNativoActivo, setArNativoActivo] = useState(false);
   const [tamanoPreview, setTamanoPreview] = useState({ width: 0, height: 0 });
   const gestoHistorial = useMemo(() => PanResponder.create({
     onMoveShouldSetPanResponder: (_, gesto) => gesto.dx < -25 && Math.abs(gesto.dx) > Math.abs(gesto.dy),
@@ -146,6 +148,30 @@ export default function CameraScreen() {
     setReporteGuardado(false);
   };
 
+  const iniciarPruebaArNativa = async () => {
+    if (!objetoReferencia || isDetecting || arNativoActivo) return;
+    try {
+      const disponibilidad = await comprobarCompatibilidadArCore();
+      if (!disponibilidad.compatible && !disponibilidad.transitorio) {
+        Alert.alert('AR no disponible', `Este dispositivo no admite ARCore (${disponibilidad.estado}).`);
+        return;
+      }
+      // ARCore y VisionCamera no pueden poseer la cámara al mismo tiempo.
+      // Este estado desmonta Camera antes de iniciar la Activity nativa.
+      setArNativoActivo(true);
+      await new Promise<void>((resolve) => setTimeout(resolve, 500));
+      const resultado = await abrirPruebaAnclasArCore(objetoReferencia.nombreUsuario);
+      if (resultado.completado) {
+        Alert.alert('Prueba AR terminada', `${resultado.total} ancla(s) permanecieron en la escena.`);
+      }
+    } catch (error: any) {
+      console.log('[AR nativo] Error:', error?.message ?? error);
+      Alert.alert('No se pudo abrir AR', error?.message ?? 'Error nativo desconocido.');
+    } finally {
+      setArNativoActivo(false);
+    }
+  };
+
   const cambiarReferencia = () => {
     if (isDetecting) stopDetection();
     setResultadoFinal(null);
@@ -195,7 +221,7 @@ export default function CameraScreen() {
 
   return (
     <View style={styles.container} {...gestoHistorial.panHandlers}>
-      {!modalVisible && resultadoFinal === null && (
+      {!modalVisible && resultadoFinal === null && !arNativoActivo && (
         <Camera
           ref={cameraRef}
           style={styles.camera}
@@ -274,6 +300,11 @@ export default function CameraScreen() {
         >
           <Text style={styles.captureText}>{isDetecting ? 'Detener' : 'Contar'}</Text>
         </Pressable>
+        {!isDetecting && objetoReferencia && (
+          <TouchableOpacity style={styles.nativeArBtn} onPress={iniciarPruebaArNativa}>
+            <Text style={styles.nativeArBtnText}>Probar AR nativo</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {reporteGuardado && (
@@ -442,6 +473,8 @@ const styles = StyleSheet.create({
   captureBtnActive: { backgroundColor: '#EF4444' },
   disabledBtn:      { backgroundColor: '#444' },
   captureText:      { fontWeight: '700', color: '#111', fontSize: 13 },
+  nativeArBtn: { backgroundColor: '#185FA5', borderRadius: 22, paddingHorizontal: 14, paddingVertical: 12, maxWidth: 96, alignItems: 'center' },
+  nativeArBtnText: { color: '#fff', fontSize: 11, lineHeight: 14, textAlign: 'center', fontWeight: '800' },
   historyHint: {
     position: 'absolute', bottom: 132, left: 24, right: 24,
     alignItems: 'center',

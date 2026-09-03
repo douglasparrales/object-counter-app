@@ -34,16 +34,7 @@
     "plugins": [
       "expo-sqlite",
       "expo-router",
-      [
-        "@reactvision/react-viro",
-        {
-          "android": {
-            "x86": true
-          }
-        }
-      ],
-      "@reactvision/react-viro-onnx",
-      "./plugins/withCounterArModel",
+      "./plugins/withNativeArCore",
       [
         "react-native-vision-camera",
         {
