@@ -8,7 +8,7 @@ La rama `main` contiene la versión estable. El experimento de conteo espacial c
 
 - **Conteo desde foto:** se toma una fotografía, se escribe el nombre del objeto y se dibuja un rectángulo alrededor de un ejemplar. El resultado puede corregirse antes de guardarlo.
 - **Conteo en tiempo real (estable):** se valida un ejemplar y se analizan imágenes periódicas. El total usa consenso temporal para evitar que cambios momentáneos o IDs inestables produzcan duplicados. Las cajas son una ayuda visual y no determinan el total.
-- **ARCore nativo (en desarrollo):** la rama `feature/arcore-native-counting` reemplaza el prototipo Viro por una Activity Android nativa. El primer hito valida compatibilidad, detección de planos y anclas persistentes; detección automática y deduplicación 3D aún están pendientes.
+- **ARCore nativo (en desarrollo):** la rama `feature/arcore-native-counting` reemplaza el prototipo Viro por una Activity Android nativa. El escaneo envía fotogramas AR al detector, proyecta cada caja aceptada sobre una superficie 3D y conserva un ancla aunque el objeto salga del encuadre. Las detecciones que reaparecen cerca de un ancla existente no vuelven a sumar.
 - **Reportes:** se guardan localmente en SQLite sólo cuando el usuario confirma el guardado.
 
 ## Estructura del repositorio
@@ -192,6 +192,15 @@ En una máquina limpia, Expo generará la carpeta nativa `android/`, ejecutará 
 
 Acepta el permiso de cámara cuando la aplicación lo solicite. Si cambias configuraciones nativas, plugins, iconos o el modelo AR, vuelve a ejecutar `npx expo run:android`; una recarga de Metro no aplica esos cambios al binario instalado.
 
+En la rama AR, si `object-counter-app/android/` ya existía antes de cambiar de rama o antes de modificar `plugins/native-arcore`, regenera primero el proyecto nativo para que Expo copie y registre el módulo actualizado:
+
+```powershell
+npx expo prebuild --clean --platform android
+npx expo run:android
+```
+
+La carpeta `android/` es generada y está ignorada por Git. El plugin configura `syncNativeArCoreSources` para copiar las fuentes Kotlin antes de cada compilación. Al incorporar el plugin por primera vez sigue siendo necesario `prebuild`; las siguientes compilaciones sincronizan AR aunque la carpeta Android ya exista.
+
 ## Uso actual
 
 ### Conteo desde foto
@@ -212,9 +221,31 @@ Acepta el permiso de cámara cuando la aplicación lo solicite. Si cambias confi
 4. Pulsa **Contar** y mueve la cámara lentamente. El consenso temporal conserva el total estable ante pérdidas breves de detección.
 5. Detén el conteo, revisa el total y guarda opcionalmente el reporte.
 
-### ARCore nativo experimental
+### Escaneo AR espacial
 
-Disponible únicamente al cambiar a `feature/arcore-native-counting`. Por ahora permite abrir una sesión AR nativa, detectar superficies y colocar anclas manuales. No debe presentarse todavía como conteo automático terminado.
+Disponible únicamente al cambiar a `feature/arcore-native-counting`.
+
+1. Configura una referencia igual que en tiempo real.
+2. Pulsa **Escanear en AR**. Confirmar la referencia no abre la cámara 2D: ésta sólo se abre al elegir **Contar**. AR desmonta las vistas VisionCamera y espera la disponibilidad física de la cámara en Android.
+3. Mueve la cámara lentamente para que ARCore reconozca la mesa. El contorno azul muestra una superficie medida; los puntos amarillos son candidatos y los verdes son objetos confirmados.
+4. Recorre la superficie lentamente, dejando cada objeto visible alrededor de un segundo y solapando las vistas. El diagnóstico separado muestra detecciones, posiciones resueltas y capturas pendientes.
+5. Cada detección válida queda fijada a una posición 3D. Puede salir del encuadre sin desaparecer del total y no se suma otra vez al volver a verla desde otro ángulo.
+6. Si el detector omite un objeto, toca su base para añadirlo manualmente. **Reiniciar** elimina todas las anclas de la sesión.
+7. Pulsa **Finalizar**, revisa el total y guarda opcionalmente el reporte como **Escaneo AR**.
+
+El teléfono y el backend deben estar en la misma red también durante el escaneo AR. Se capturan imágenes cada 350 ms como máximo, con una cola limitada de seis imágenes, sin esperar a que termine cada petición. Cada captura conserva intrínsecos y geometría referida al mapa compartido. La respuesta se proyecta desde la cámara de esa captura, incluso si el teléfono se movió durante la inferencia. El fallback de profundidad sobre el frame actual sólo se admite si la cámara permanece prácticamente inmóvil. Dos observaciones independientes confirman cada objeto.
+
+Una pausa breve conserva candidatos y respuestas pendientes; se aplican al recuperar el seguimiento. Reiniciar sí invalida toda la evidencia y vacía el mapa. Si las referencias confirmadas dejan de seguirse, se suspenden nuevas altas hasta recuperar el mapa. Una pérdida definitiva exige guardar sólo lo confirmado o reiniciar el conteo. Las referencias persisten mientras la Activity AR permanece abierta, no después de cerrar la sesión ni de reiniciar la aplicación.
+
+Si no se detecta superficie tras 15 segundos, se muestra orientación y la opción de volver al selector 2D. Tras 30 segundos continuos sin tracking, la sesión se pausa y ofrece reintento explícito. Si Android no libera la cámara en 6 segundos, aparece un error de adquisición; un fallo transitorio de `Session.resume()` tiene hasta tres intentos. **Reintentar AR** vuelve a adquirir la cámara sin borrar el total confirmado.
+
+`system/camera-is-restricted` corresponde a `ERROR_CAMERA_DISABLED` de CameraX; no es el mismo error que cámara ocupada. Revisa el permiso de cámara, el interruptor global **Acceso a la cámara** y las restricciones del administrador si el teléfono está administrado. Una política que deshabilita la cámara no se puede resolver cambiando a video. La app muestra el problema y detiene la captura en lugar de reabrirla en bucle.
+
+Los cambios incluyen Kotlin y requieren recompilar Android; recargar Metro no actualiza el código nativo. La vista y el bridge identifican la revisión `AR 2026.09.15.2`. Las fuentes autoritativas están en `object-counter-app/plugins/native-arcore/` y se sincronizan en prebuild y antes de compilar. No es necesario desinstalar ni borrar los datos. El botón Finalizar espera las capturas pendientes y avisa si quedan candidatos o partes del recorrido sin analizar. Metro muestra `[AR diagnóstico]` y el backend `[AR_DETECT]`, relacionados por `frame`. Investigación, límites y caso de aceptación: [docs/ar-counting.md](docs/ar-counting.md).
+
+“Fuera del rango de la cámara” significa que el objeto puede dejar de verse después de haber sido escaneado al menos una vez. Ningún modo basado sólo en la cámara puede contar un objeto que nunca apareció en una imagen; para ese caso harían falta sensores o fuentes externas al teléfono.
+
+La prioridad de esta rama es el escaneo AR en tiempo real. Procesar un video grabado se deja como un modo posterior: un tracker 2D sobre video no basta para garantizar que un objeto que sale y reaparece sea el mismo. Para ofrecer esa garantía, el video necesitará reconstrucción de cámara/SLAM y asociación 3D equivalentes a las anclas de esta sesión.
 
 Desliza la pantalla de cámara hacia la izquierda o usa el menú lateral para consultar los reportes guardados.
 
@@ -258,7 +289,10 @@ Desinstala el development build anterior y ejecuta nuevamente `npx expo run:andr
 - Cuando un objeto cumple la estabilidad temporal aparece `[Tracking] Objeto estable confirmado #...`.
 - YOLO-World utiliza el nombre como etiqueta; una foto de referencia no entrena una clase nueva.
 - La comparación visual ayuda a filtrar candidatos, pero no garantiza reconocer cualquier objeto desconocido.
-- El modo estable reduce duplicados mediante consenso temporal, pero no reconstruye el espacio físico. La garantía espacial fuera del encuadre es el objetivo de la rama ARCore nativa.
+- El modo estable reduce duplicados mediante consenso temporal, pero no reconstruye el espacio físico. AR usa referencias espaciales compartidas y asociación de una observación por identidad y lote, con tolerancia ajustada al tamaño observado (8–25 mm).
+- El escaneo AR automático requiere superficies o profundidad válidas. Objetos suspendidos, reflectantes, transparentes o demasiado juntos pueden necesitar corrección manual.
+- El inventario debe permanecer quieto durante una sesión. Si un objeto contado cambia físicamente de lugar, su ancla anterior no se mueve con él y una detección en la nueva posición podría sumarlo otra vez.
+- Los objetos y capturas cercanos comparten anclas regionales (hasta 1,5 m del origen de cada región), evitando anclas independientes para cada detección. La precisión con objetos muy juntos y recorridos extensos necesita validación física.
 
 ## Desarrollo por ramas
 

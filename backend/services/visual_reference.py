@@ -64,3 +64,41 @@ def detectar_por_perfil(image: Image.Image, perfil: dict, etiqueta: str):
             continue
         predicciones.append((etiqueta, min(0.95, 0.58 + relleno), (x, y, x + w, y + h)))
     return predicciones
+
+
+def detectar_por_perfil_ar(image: Image.Image, perfil: dict, etiqueta: str):
+    """Objetos delgados en frames AR: escala y orientación variables, sin abrir con 7x7."""
+    hsv = cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2HSV)
+    centro = perfil["centro_hsv"]
+    # La distancia circular también admite rojos alrededor de 0/179.
+    tono = np.abs(hsv[:, :, 0].astype(np.float32) - centro[0])
+    tono = np.minimum(tono, 180 - tono)
+    mascara = (
+        (tono <= perfil["tolerancia_h"])
+        & (hsv[:, :, 1] >= max(25, centro[1] - perfil["tolerancia_s"]))
+        & (np.abs(hsv[:, :, 2].astype(np.float32) - centro[2]) <= perfil["tolerancia_v"])
+    ).astype(np.uint8) * 255
+    # Cerrar pequeños huecos, sin eliminar trazos de uno o dos píxeles.
+    mascara = cv2.morphologyEx(mascara, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    contornos, _ = cv2.findContours(mascara, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    predicciones = []
+    for contorno in contornos:
+        area = cv2.contourArea(contorno)
+        if area < max(12, image.width * image.height * 0.000025):
+            continue
+        (_, _), (lado_a, lado_b), _ = cv2.minAreaRect(contorno)
+        menor, mayor = sorted((lado_a, lado_b))
+        if menor < 1 or mayor < 8:
+            continue
+        aspecto = mayor / menor
+        if not max(1, perfil["aspecto"] * 0.30) <= aspecto <= perfil["aspecto"] * 3.2:
+            continue
+        x, y, w, h = cv2.boundingRect(contorno)
+        if w * h > image.width * image.height * 0.65:
+            continue
+        relleno = area / max(1, lado_a * lado_b)
+        if relleno < 0.25:
+            continue
+        # Es evidencia de apariencia, no una probabilidad de identificación.
+        predicciones.append((etiqueta, min(0.90, 0.5 + relleno * 0.4), (x, y, x + w, y + h)))
+    return predicciones

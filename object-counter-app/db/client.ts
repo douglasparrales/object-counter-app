@@ -56,7 +56,7 @@ export type ReporteGuardado = {
   nombreObjeto: string;
   claseYolo: string;
   ubicacion: string;
-  modoConteo: 'tiempo_real' | 'foto_estatica';
+  modoConteo: 'tiempo_real' | 'foto_estatica' | 'ar_espacial';
   totalObjetos: number;
 };
 

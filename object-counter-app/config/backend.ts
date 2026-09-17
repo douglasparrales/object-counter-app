@@ -1,4 +1,4 @@
-const DEFAULT_BACKEND_URL = 'http://192.168.1.11:8000';
+const DEFAULT_BACKEND_URL = 'http://192.168.1.7:8000';
 
 // Una sola fuente para todos los modos de conteo. Expo reemplaza las variables
 // EXPO_PUBLIC_* al crear el bundle, por lo que la IP puede cambiarse sin tocar

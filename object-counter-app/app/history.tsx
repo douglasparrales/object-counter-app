@@ -7,6 +7,11 @@ import AppMenu from '../components/AppMenu';
 export default function HistoryScreen() {
   const router = useRouter();
   const [reportes, setReportes] = useState<ReporteGuardado[]>([]);
+  const etiquetaModo = (modo: ReporteGuardado['modoConteo']) => {
+    if (modo === 'foto_estatica') return 'Foto estática';
+    if (modo === 'ar_espacial') return 'Escaneo AR';
+    return 'Tiempo real';
+  };
   const gestoVolver = PanResponder.create({
     onMoveShouldSetPanResponder: (_, gesto) => gesto.dx > 25 && gesto.dx > Math.abs(gesto.dy),
     onPanResponderRelease: (_, gesto) => { if (gesto.dx > 80) router.back(); },
@@ -36,7 +41,7 @@ export default function HistoryScreen() {
             {item.imagenUri ? <Image source={{ uri: item.imagenUri }} style={styles.image} /> : <View style={styles.placeholder} />}
             <View style={styles.info}>
               <Text style={styles.object}>{item.nombreObjeto || item.claseYolo}</Text>
-              <Text style={styles.detail}>{item.ubicacion || 'Sin ubicación'} · {item.modoConteo === 'foto_estatica' ? 'Foto estática' : 'Tiempo real'}</Text>
+              <Text style={styles.detail}>{item.ubicacion || 'Sin ubicación'} · {etiquetaModo(item.modoConteo)}</Text>
               <Text style={styles.detail}>{new Date(item.fechaInicio).toLocaleString()}</Text>
               <Text style={styles.total}>{item.totalObjetos} objetos</Text>
             </View>

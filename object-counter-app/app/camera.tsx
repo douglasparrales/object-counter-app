@@ -1,15 +1,15 @@
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   StyleSheet, View, Text, Pressable, TouchableOpacity,
-  Image, ActivityIndicator, Modal, TextInput, Alert, PanResponder,
+  Image, ActivityIndicator, Modal, TextInput, Alert, PanResponder, AppState, Linking,
 } from 'react-native';
-import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
-import { useRouter } from 'expo-router';
+import { Camera, useCameraDevice, useCameraPermission, type CameraRuntimeError } from 'react-native-vision-camera';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { guardarReporte, persistirImagenReferencia } from '../db/client';
 import AppMenu from '../components/AppMenu';
 import SaveReportModal from '../components/SaveReportModal';
 import ReferenceSelector, { type SeleccionReferencia } from '../components/ReferenceSelector';
-import { abrirPruebaAnclasArCore, comprobarCompatibilidadArCore } from '../services/nativeArCore';
+import { abrirConteoArCore, comprobarCompatibilidadArCore } from '../services/nativeArCore';
 import {
   useDetection,
 } from '../hooks/useDetection';
@@ -37,12 +37,22 @@ export default function CameraScreen() {
   const [referenciaIdLocal, setReferenciaIdLocal] = useState<string | null>(null);
   const [capturando, setCapturando]         = useState(false);
   const [resultadoFinal, setResultadoFinal] = useState<number | null>(null);
+  const [modoResultado, setModoResultado] = useState<'tiempo_real' | 'ar_espacial'>('tiempo_real');
   const [reporteGuardado, setReporteGuardado] = useState(false);
   const [arNativoActivo, setArNativoActivo] = useState(false);
+  const [preparandoAr, setPreparandoAr] = useState(false);
+  const aperturaAr = useRef(false);
+  const [preview2D, setPreview2D] = useState(false);
+  const [errorCamara, setErrorCamara] = useState<string | null>(null);
+  const [pantallaEnfocada, setPantallaEnfocada] = useState(true);
+  const [appActiva, setAppActiva] = useState(AppState.currentState === 'active');
+  const contarAlAbrir = useRef(false);
+  const montada = useRef(true);
+  const abrirTrasDesmontar = useRef<(() => void) | null>(null);
   const [tamanoPreview, setTamanoPreview] = useState({ width: 0, height: 0 });
   const gestoHistorial = useMemo(() => PanResponder.create({
     onMoveShouldSetPanResponder: (_, gesto) => gesto.dx < -25 && Math.abs(gesto.dx) > Math.abs(gesto.dy),
-    onPanResponderRelease: (_, gesto) => { if (gesto.dx < -80) router.push('/history'); },
+    onPanResponderRelease: (_, gesto) => { if (gesto.dx < -80 && !aperturaAr.current) router.push('/history'); },
   }), [router]);
 
   const {
@@ -57,7 +67,56 @@ export default function CameraScreen() {
     limpiarReferencia,
   } = useDetection();
 
+  useEffect(() => {
+    montada.current = true;
+    const subscription = AppState.addEventListener('change', value => setAppActiva(value === 'active'));
+    return () => {
+      montada.current = false;
+      abrirTrasDesmontar.current?.();
+      abrirTrasDesmontar.current = null;
+      subscription.remove();
+    };
+  }, []);
+
+  useFocusEffect(useCallback(() => {
+    setPantallaEnfocada(true);
+    return () => {
+      setPantallaEnfocada(false);
+      contarAlAbrir.current = false;
+      stopDetection();
+    };
+  }, [stopDetection]));
+
+  useEffect(() => {
+    if (!appActiva) {
+      contarAlAbrir.current = false;
+      stopDetection();
+    }
+  }, [appActiva, stopDetection]);
+
+  // El efecto ocurre después del commit que quita ambas vistas Camera.
+  // La liberación física se comprueba en Android, no con onStopped de CameraX.
+  useEffect(() => {
+    if (arNativoActivo) {
+      abrirTrasDesmontar.current?.();
+      abrirTrasDesmontar.current = null;
+    }
+  }, [arNativoActivo]);
+
+  const manejarErrorCamara = (error: CameraRuntimeError) => {
+    console.log(`[Camera] ${error.code}: ${error.message}`);
+    if (aperturaAr.current || !montada.current) return;
+    contarAlAbrir.current = false;
+    stopDetection();
+    setPreview2D(false);
+    setErrorCamara(error.code === 'system/camera-is-restricted'
+      ? 'Android ha restringido la cámara. Revisa Acceso a la cámara en los ajustes rápidos y la política del dispositivo si es administrado.'
+      : `No se pudo abrir la cámara (${error.code}). Revisa el permiso de cámara y cierra otras apps que la usen.`);
+  };
+
   const abrirModalReferencia = () => {
+    setPreview2D(false);
+    setErrorCamara(null);
     limpiarReferencia();
     setEtapa('camara');
     setFotoCapturada(null);
@@ -133,12 +192,20 @@ export default function CameraScreen() {
     confirmarObjeto(clase, nombre, fotoCapturada, referenciaIdLocal);
     console.log(`[Conteo] Referencia confirmada: nombre="${nombre}", clase="${clase}"`);
     setResultadoFinal(null);
+    setPreview2D(false);
     setModalVisible(false);
   };
 
   const iniciarConteo = () => {
+    if (aperturaAr.current) return;
     console.log('[Conteo] Iniciando cámara y tracking.');
-    startDetection(cameraRef);
+    setModoResultado('tiempo_real');
+    setErrorCamara(null);
+    if (preview2D && cameraRef.current) startDetection(cameraRef);
+    else {
+      contarAlAbrir.current = true;
+      setPreview2D(true);
+    }
   };
 
   const finalizarConteo = () => {
@@ -148,31 +215,51 @@ export default function CameraScreen() {
     setReporteGuardado(false);
   };
 
-  const iniciarPruebaArNativa = async () => {
-    if (!objetoReferencia || isDetecting || arNativoActivo) return;
+  const iniciarConteoAr = async () => {
+    if (!objetoReferencia || isDetecting || aperturaAr.current) return;
+    aperturaAr.current = true;
+    setPreparandoAr(true);
     try {
       const disponibilidad = await comprobarCompatibilidadArCore();
-      if (!disponibilidad.compatible && !disponibilidad.transitorio) {
-        Alert.alert('AR no disponible', `Este dispositivo no admite ARCore (${disponibilidad.estado}).`);
+      if (!disponibilidad.compatible) {
+        const detalle = disponibilidad.transitorio
+          ? 'ARCore todavía está comprobando el dispositivo. Intenta nuevamente en unos segundos.'
+          : `Este dispositivo no admite ARCore (${disponibilidad.estado}).`;
+        Alert.alert('AR no disponible', detalle);
         return;
       }
-      // ARCore y VisionCamera no pueden poseer la cámara al mismo tiempo.
-      // Este estado desmonta Camera antes de iniciar la Activity nativa.
-      setArNativoActivo(true);
-      await new Promise<void>((resolve) => setTimeout(resolve, 500));
-      const resultado = await abrirPruebaAnclasArCore(objetoReferencia.nombreUsuario);
-      if (resultado.completado) {
-        Alert.alert('Prueba AR terminada', `${resultado.total} ancla(s) permanecieron en la escena.`);
+      if (!montada.current || AppState.currentState !== 'active') return;
+      setPreview2D(false);
+      setErrorCamara(null);
+      await new Promise<void>(resolve => {
+        abrirTrasDesmontar.current = resolve;
+        setArNativoActivo(true);
+      });
+      if (!montada.current || AppState.currentState !== 'active') return;
+      const resultado = await abrirConteoArCore(
+        objetoReferencia.nombreUsuario,
+        objetoReferencia.claseYolo,
+        objetoReferencia.referenciaId,
+      );
+      if (montada.current && resultado.completado) {
+        setModoResultado('ar_espacial');
+        setResultadoFinal(resultado.total);
+        setReporteGuardado(false);
       }
     } catch (error: any) {
       console.log('[AR nativo] Error:', error?.message ?? error);
-      Alert.alert('No se pudo abrir AR', error?.message ?? 'Error nativo desconocido.');
+      if (montada.current) Alert.alert('No se pudo abrir AR', error?.message ?? 'Error nativo desconocido.');
     } finally {
-      setArNativoActivo(false);
+      if (montada.current) {
+        setArNativoActivo(false);
+        setPreparandoAr(false);
+      }
+      aperturaAr.current = false;
     }
   };
 
   const cambiarReferencia = () => {
+    if (aperturaAr.current) return;
     if (isDetecting) stopDetection();
     setResultadoFinal(null);
     abrirModalReferencia();
@@ -189,7 +276,7 @@ export default function CameraScreen() {
         nombreObjeto: objetoReferencia.nombreUsuario,
         claseYolo: objetoReferencia.claseYolo,
         ubicacion: ubicacion.trim(),
-        modoConteo: 'tiempo_real',
+        modoConteo: modoResultado,
         totalObjetos: resultadoFinal,
       });
       console.log('[Reporte] Conteo guardado con auditoría.');
@@ -221,17 +308,38 @@ export default function CameraScreen() {
 
   return (
     <View style={styles.container} {...gestoHistorial.panHandlers}>
-      {!modalVisible && resultadoFinal === null && !arNativoActivo && (
+      {!modalVisible && resultadoFinal === null && preview2D && !arNativoActivo && appActiva && pantallaEnfocada && !errorCamara && (
         <Camera
           ref={cameraRef}
           style={styles.camera}
           device={device}
-          isActive={!modalVisible && resultadoFinal === null}
+          isActive={!modalVisible && resultadoFinal === null && !preparandoAr}
+          onError={manejarErrorCamara}
+          onStarted={() => {
+            if (contarAlAbrir.current && !aperturaAr.current) {
+              contarAlAbrir.current = false;
+              startDetection(cameraRef);
+            }
+          }}
           photo
           resizeMode="cover"
           outputOrientation="preview"
           onLayout={({ nativeEvent }) => setTamanoPreview(nativeEvent.layout)}
         />
+      )}
+
+      {!modalVisible && !preview2D && !preparandoAr && !arNativoActivo && resultadoFinal === null && (
+        <View style={styles.centered}>
+          <Text style={styles.message}>{errorCamara ?? 'Referencia lista. Escanear en AR conserva los objetos ya vistos al recorrer la superficie. Contar usa el encuadre 2D.'}</Text>
+          {errorCamara && <TouchableOpacity style={styles.btn} onPress={() => Linking.openSettings()}><Text style={styles.btnText}>Abrir ajustes</Text></TouchableOpacity>}
+        </View>
+      )}
+
+      {(preparandoAr || arNativoActivo) && (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#4ade80" />
+          <Text style={styles.message}>Preparando cámara para AR…</Text>
+        </View>
       )}
 
       {!modalVisible && resultadoFinal === null && cajasGuardadas.length > 0 && (
@@ -261,7 +369,7 @@ export default function CameraScreen() {
         </View>
       )}
 
-      {!modalVisible && <View style={styles.menuButton}><AppMenu /></View>}
+      {!modalVisible && !preparandoAr && <View style={styles.menuButton}><AppMenu /></View>}
 
       {objetoReferencia && (
         <View style={styles.referenceBox}>
@@ -285,7 +393,7 @@ export default function CameraScreen() {
         </View>
       )}
 
-      <View style={styles.controls}>
+      <View style={styles.controls} pointerEvents={preparandoAr ? 'none' : 'auto'}>
         <TouchableOpacity style={styles.navBtn} onPress={() => router.back()}>
           <Text style={styles.navBackText}>‹</Text>
         </TouchableOpacity>
@@ -301,8 +409,8 @@ export default function CameraScreen() {
           <Text style={styles.captureText}>{isDetecting ? 'Detener' : 'Contar'}</Text>
         </Pressable>
         {!isDetecting && objetoReferencia && (
-          <TouchableOpacity style={styles.nativeArBtn} onPress={iniciarPruebaArNativa}>
-            <Text style={styles.nativeArBtnText}>Probar AR nativo</Text>
+          <TouchableOpacity style={styles.nativeArBtn} onPress={iniciarConteoAr}>
+            <Text style={styles.nativeArBtnText}>Escanear en AR</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -331,14 +439,20 @@ export default function CameraScreen() {
 
           {etapa === 'camara' && (
             <>
-              <Camera
+              {modalVisible && !arNativoActivo && appActiva && pantallaEnfocada && !errorCamara && <Camera
                 ref={modalCameraRef}
                 style={styles.modalCamera}
                 device={device}
                 isActive={modalVisible && etapa === 'camara'}
+                onError={manejarErrorCamara}
                 photo={true}
                 outputOrientation="preview"
-              />
+              />}
+              {errorCamara && <View style={styles.centered}>
+                <Text style={styles.message}>{errorCamara}</Text>
+                <TouchableOpacity style={styles.btn} onPress={() => Linking.openSettings()}><Text style={styles.btnText}>Abrir ajustes</Text></TouchableOpacity>
+                <TouchableOpacity style={styles.btn} onPress={() => setErrorCamara(null)}><Text style={styles.btnText}>Reintentar cámara</Text></TouchableOpacity>
+              </View>}
               <View style={styles.modalMenu}><AppMenu /></View>
               <Text style={styles.modalHint}>Encuadra el objeto que quieres contar</Text>
               <View style={styles.modalControls}>

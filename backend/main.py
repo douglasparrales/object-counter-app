@@ -1,11 +1,13 @@
 from fastapi import FastAPI, File, UploadFile, Query, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO, YOLOWorld
 from routes.static_count import crear_router as crear_router_conteo_estatico
 from services.static_counter import StaticImageCounter
-from services.visual_reference import crear_perfil_visual, detectar_por_perfil
+from services.visual_reference import crear_perfil_visual, detectar_por_perfil, detectar_por_perfil_ar
 from deep_translator import GoogleTranslator
 import io
+import json
 import time
 import traceback
 import unicodedata
@@ -292,6 +294,8 @@ async def detect(
     clase_filtro: str = Query(default=""),
     referencia_id: str = Query(default=""),
     modo: str = Query(default="tiempo_real"),
+    rotacion: int = Query(default=0),
+    ar_frame: int = Query(default=0, ge=0),
 ):
     t0 = time.time()
     print(f"\n📥 [/detect] Nuevo frame | Filtro: '{clase_filtro}'")
@@ -302,6 +306,16 @@ async def detect(
         print(f"❌ [/detect ERROR] Error leyendo la imagen del frame: {e}")
         raise HTTPException(status_code=400, detail="No se pudo leer la imagen enviada.")
 
+    if rotacion not in (0, 90, 180, 270):
+        raise HTTPException(status_code=422, detail="La rotación debe ser 0, 90, 180 o 270.")
+    img_w_original, img_h_original = image.size
+    if rotacion == 90:
+        image = image.transpose(Image.Transpose.ROTATE_270)
+    elif rotacion == 180:
+        image = image.transpose(Image.Transpose.ROTATE_180)
+    elif rotacion == 270:
+        image = image.transpose(Image.Transpose.ROTATE_90)
+
     img_w, img_h = image.size
     clase = normalizar(clase_filtro)
     _, candidatos = obtener_candidatos(clase)
@@ -311,16 +325,24 @@ async def detect(
     perfil_apariencia = referencia_registro.get("perfil_apariencia") if referencia_registro else None
     if referencia_id and referencia is None:
         print("[REFERENCIA] ID no disponible; se usará sólo el filtro de YOLO.")
+        if modo == "ar_espacial":
+            raise HTTPException(status_code=409, detail="La referencia AR expiró o el backend se reinició. Vuelve a seleccionar un ejemplar antes de continuar.")
     print(f"🎯 [/detect] Clases enviadas a YOLO: {candidatos}")
 
-    candidatos_apariencia = detectar_por_perfil(image, perfil_apariencia, candidatos[0]) if perfil_apariencia else []
+    es_ar = modo == "ar_espacial"
+    detector_perfil = detectar_por_perfil_ar if es_ar else detectar_por_perfil
+    candidatos_apariencia = await run_in_threadpool(detector_perfil, image, perfil_apariencia, candidatos[0]) if perfil_apariencia else []
     try:
         # Una foto masiva conserva más detalle para objetos pequeños; el modo
         # tiempo real sigue siendo más rápido para la cámara en vivo.
         imgsz = 960 if modo == "foto_masiva" else 640
-        results = [] if candidatos_apariencia else ejecutar_inferencia(image, candidatos, confianza=0.06, imgsz=imgsz)
+        results = [] if candidatos_apariencia else await run_in_threadpool(
+            ejecutar_inferencia, image, candidatos, 0.06, imgsz
+        )
     except Exception as e:
         print(f"❌ [/detect ERROR] Fallo en la inferencia del loop: {e}")
+        if es_ar:
+            raise HTTPException(status_code=503, detail="El detector no pudo procesar la imagen AR.") from e
         return {"objetos": []}
 
     candidatos_detectados = [{
@@ -377,18 +399,42 @@ async def detect(
         objetos.append(candidato)
     for objeto in objetos:
         objeto.pop("caja_px")
+        # La imagen CPU de ARCore está en orientación física del sensor. Se
+        # rota para que YOLO vea objetos verticales y luego se devuelven las
+        # cajas al sistema original que Coordinates2d.IMAGE_PIXELS espera.
+        if rotacion:
+            cx, cy, w, h = objeto["cx"], objeto["cy"], objeto["w"], objeto["h"]
+            if rotacion == 90:
+                objeto.update(cx=round(cy, 4), cy=round(1 - cx, 4), w=h, h=w)
+            elif rotacion == 180:
+                objeto.update(cx=round(1 - cx, 4), cy=round(1 - cy, 4))
+            else:  # 270 grados en sentido horario
+                objeto.update(cx=round(1 - cy, 4), cy=round(cx, 4), w=h, h=w)
         # El preview móvil usa resizeMode="cover" y puede recortar los lados
         # de la foto. Estas dimensiones permiten proyectar cada caja sobre la
         # vista real sin asumir que ambas superficies tienen el mismo aspecto.
-        objeto["frame_width"] = img_w
-        objeto["frame_height"] = img_h
+        objeto["frame_width"] = img_w_original
+        objeto["frame_height"] = img_h_original
 
     # Imprime un resumen corto en una sola línea por cada frame
     duracion = round(time.time() - t0, 3)
-    ruta = "apariencia" if perfil_apariencia else "yolo"
+    ruta = "apariencia" if candidatos_apariencia else "yolo"
     print(f"🔍 [/detect RESULTADO] Filtro: '{clase}' | Objetos: {len(objetos)} | Ruta: {ruta} | Tiempo: {duracion}s")
 
-    return {"objetos": objetos}
+    respuesta = {"objetos": objetos}
+    if es_ar:
+        respuesta["diagnostico"] = {
+            "frame": ar_frame,
+            "ruta": ruta, "duracion_ms": round((time.time() - t0) * 1000),
+            "frame_width": img_w_original, "frame_height": img_h_original,
+            "referencia_disponible": bool(referencia_registro),
+        }
+        print("[AR_DETECT] " + json.dumps({
+            **respuesta["diagnostico"], "rotacion": rotacion,
+            "visibles": len(objetos), "coordenadas": "sensor_normalizadas",
+            "cajas": [{k: o[k] for k in ("cx", "cy", "w", "h", "confianza")} for o in objetos],
+        }, ensure_ascii=True), flush=True)
+    return respuesta
 
 
 def convertir_resultados(results) -> list[tuple[str, float, tuple[float, float, float, float]]]:
