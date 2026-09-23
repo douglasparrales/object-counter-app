@@ -21,6 +21,6 @@
 
 ## Verificación
 
-TypeScript sin errores y seis pruebas de superficie aprobadas. La instalación Android y la validación física de la versión integrada se verifican por separado; no debe confundirse con la prueba física previa a esta integración.
+TypeScript sin errores y seis pruebas de superficie aprobadas. Gradle completó `app:installDebug` e instaló la APK integrada en el Samsung SM-A266M. El backend actualizado respondió `{"status":"ok"}` en `/health`. La validación física del conteo y la rotación de esta versión integrada sigue pendiente; no debe confundirse con la prueba física previa a esta integración.
 
 No se han incluido capturas privadas de depuración ni las eliminaciones previas de imágenes de sprints en los commits. Main no se actualiza hasta completar la validación de la integración.
