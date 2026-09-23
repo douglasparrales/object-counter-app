@@ -8,9 +8,9 @@ import com.google.ar.core.TrackingState
 import kotlin.math.abs
 
 /** Geometría de la imagen enviada a YOLO. Sólo se usa y libera en el hilo GL. */
-class ArCaptureGeometry(frame: Frame, session: Session, mapa: ArSpatialMap) {
+class ArCaptureGeometry(frame: Frame, session: Session, private val mapa: ArSpatialMap) {
   private data class Superficie(
-    val ancla: ArSpatialMap.Marca,
+    val planoEnCamara: Pose,
     val camaraEnPlano: Pose,
     val poligono: FloatArray,
   )
@@ -18,8 +18,10 @@ class ArCaptureGeometry(frame: Frame, session: Session, mapa: ArSpatialMap) {
   private val focal = frame.camera.imageIntrinsics.focalLength
   private val centro = frame.camera.imageIntrinsics.principalPoint
   private val dimensiones = frame.camera.imageIntrinsics.imageDimensions
+  private val profundidad = ArDepthSnapshot.capturar(frame, session)
+  val tieneProfundidad: Boolean get() = profundidad != null
   private val superficies = mutableListOf<Superficie>()
-  private val anclaCamara = mapa.ubicar(frame.camera.pose) { session.createAnchor(frame.camera.pose) }
+  private val anclaCamara = mapa.crearCaptura { session.createAnchor(frame.camera.pose) }
   private var liberada = false
   var motivo = "SIN_PLANOS"
     private set
@@ -27,21 +29,23 @@ class ArCaptureGeometry(frame: Frame, session: Session, mapa: ArSpatialMap) {
 
   fun poseCamaraActual(): Pose? = if (!liberada && anclaCamara.trackingState == TrackingState.TRACKING) anclaCamara.pose else null
 
-  fun completarSuperficies(session: Session, mapa: ArSpatialMap) {
+  fun completarSuperficies(session: Session) {
     // Un plano puede aparecer durante la inferencia. La pose anclada de la
     // cámara permite resolver la imagen anterior sin usar el encuadre actual.
     if (liberada) return
     val camara = poseCamaraActual() ?: return
     // Reemplazar instantáneas: no acumular polígonos viejos en cada reintento.
-    superficies.clear()
-    session.getAllTrackables(Plane::class.java).filter {
+    val planos = session.getAllTrackables(Plane::class.java).filter {
       it.trackingState == TrackingState.TRACKING && it.subsumedBy == null && it.type == Plane.Type.HORIZONTAL_UPWARD_FACING
-    }.take(4).forEach { plano ->
+    }.take(4)
+    if (planos.isEmpty()) return
+    superficies.clear()
+    planos.forEach { plano ->
       val pose = plano.centerPose
       val polygon = plano.polygon.duplicate()
       val puntos = FloatArray(polygon.remaining()).also { polygon.get(it) }
       if (puntos.size >= 6) superficies.add(Superficie(
-        mapa.ubicar(pose) { plano.createAnchor(pose) }, pose.inverse().compose(camara), puntos,
+        camara.inverse().compose(pose), pose.inverse().compose(camara), puntos,
       ))
     }
   }
@@ -60,7 +64,7 @@ class ArCaptureGeometry(frame: Frame, session: Session, mapa: ArSpatialMap) {
         val polygon = plano.polygon.duplicate()
         val puntos = FloatArray(polygon.remaining()).also { polygon.get(it) }
         if (puntos.size >= 6) superficies.add(Superficie(
-          mapa.ubicar(pose) { plano.createAnchor(pose) }, pose.inverse().compose(frame.camera.pose), puntos,
+          frame.camera.pose.inverse().compose(pose), pose.inverse().compose(frame.camera.pose), puntos,
         ))
       }
     } catch (error: Exception) {
@@ -88,10 +92,6 @@ class ArCaptureGeometry(frame: Frame, session: Session, mapa: ArSpatialMap) {
     var distancia = Float.POSITIVE_INFINITY
     var resultado: Pose? = null
     for (superficie in superficies) {
-      if (superficie.ancla.trackingState != TrackingState.TRACKING) {
-        motivo = "ANCLA_PLANO_SIN_TRACKING"
-        continue
-      }
       val origen = superficie.camaraEnPlano.translation
       val direccion = superficie.camaraEnPlano.rotateVector(rayo)
       if (abs(direccion[1]) < 0.05f) { motivo = "RAYO_PARALELO"; continue }
@@ -102,17 +102,24 @@ class ArCaptureGeometry(frame: Frame, session: Session, mapa: ArSpatialMap) {
       val z = origen[2] + t * direccion[2]
       if (!dentroDelPoligono(x, z, superficie.poligono)) { motivo = "FUERA_DEL_POLIGONO"; continue }
       distancia = t
-      resultado = superficie.ancla.pose.compose(Pose.makeTranslation(x, 0f, z))
+      resultado = anclaCamara.pose.compose(superficie.planoEnCamara).compose(Pose.makeTranslation(x, 0f, z))
     }
-    if (resultado != null) motivo = "UBICADO"
+    if (resultado != null) motivo = "PLANO"
+    else {
+      val z = profundidad?.metros(cx, cy)
+      if (z != null) {
+        resultado = poseCamaraActual()?.compose(Pose.makeTranslation(rayo[0] * z, rayo[1] * z, -z))
+        motivo = "PROFUNDIDAD"
+      }
+    }
     return resultado
   }
 
   fun liberar() {
     if (liberada) return
     liberada = true
-    // Las referencias pertenecen al mapa de la sesión; liberar una captura
-    // no debe liberar el marco de los objetos ya contados.
+    // El mapa de objetos tiene anclas propias; soltar una foto no lo modifica.
+    mapa.liberarCaptura(anclaCamara)
     superficies.clear()
   }
 

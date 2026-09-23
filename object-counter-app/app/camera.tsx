@@ -1,3 +1,4 @@
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   StyleSheet, View, Text, Pressable, TouchableOpacity,
@@ -64,6 +65,8 @@ export default function CameraScreen() {
     identificarFoto,
     startDetection,
     stopDetection,
+    finishDetection,
+    estadoBarrido,
     limpiarReferencia,
   } = useDetection();
 
@@ -170,9 +173,16 @@ export default function CameraScreen() {
     }
 
     setEtapa('identificando');
+    setClaseYoloLocal(null);
+    setConfianzaLocal(null);
+    setReferenciaIdLocal(null);
     console.log(`[YOLO] Identificando referencia: "${nombre}"`);
     try {
       const resultado = await identificarFoto(fotoCapturada, nombre, seleccionReferencia);
+      if (!resultado.exito || !resultado.clase || !resultado.referenciaId) {
+        Alert.alert('Referencia no disponible', 'No se pudo registrar el ejemplar en el servidor. Revisa la conexión y vuelve a identificarlo antes de contar.');
+        return;
+      }
       setClaseYoloLocal(resultado?.clase ?? null);
       setConfianzaLocal(resultado?.confianza ?? null);
       setReferenciaIdLocal(resultado?.referenciaId ?? null);
@@ -186,7 +196,7 @@ export default function CameraScreen() {
   };
 
   const confirmarFinal = () => {
-    if (!fotoCapturada) return;
+    if (!fotoCapturada || !claseYoloLocal || !referenciaIdLocal) return;
     const nombre = nombreUsuario.trim();
     const clase  = claseYoloLocal || nombre;
     confirmarObjeto(clase, nombre, fotoCapturada, referenciaIdLocal);
@@ -208,9 +218,9 @@ export default function CameraScreen() {
     }
   };
 
-  const finalizarConteo = () => {
-    const totalFinal = stopDetection();
-    console.log(`[Conteo] Sesión 2D finalizada. Total: ${totalFinal}`);
+  const finalizarConteo = async () => {
+    const totalFinal = await finishDetection();
+    console.log(`[Conteo] Barrido finalizado. Total: ${totalFinal}`);
     setResultadoFinal(totalFinal);
     setReporteGuardado(false);
   };
@@ -282,7 +292,6 @@ export default function CameraScreen() {
       console.log('[Reporte] Conteo guardado con auditoría.');
     } catch (error) {
       console.log('[Reporte] Error guardando conteo:', error);
-      Alert.alert('Error', 'No se pudo guardar el reporte.');
       throw error;
     }
   };
@@ -307,6 +316,7 @@ export default function CameraScreen() {
   }
 
   return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#10151c' }}>
     <View style={styles.container} {...gestoHistorial.panHandlers}>
       {!modalVisible && resultadoFinal === null && preview2D && !arNativoActivo && appActiva && pantallaEnfocada && !errorCamara && (
         <Camera
@@ -330,7 +340,7 @@ export default function CameraScreen() {
 
       {!modalVisible && !preview2D && !preparandoAr && !arNativoActivo && resultadoFinal === null && (
         <View style={styles.centered}>
-          <Text style={styles.message}>{errorCamara ?? 'Referencia lista. Escanear en AR conserva los objetos ya vistos al recorrer la superficie. Contar usa el encuadre 2D.'}</Text>
+          <Text style={styles.message}>{errorCamara ?? 'Deja los objetos quietos sobre una superficie aproximadamente plana con detalles visibles. Mueve la cámara despacio, manteniendo parte de la zona anterior en pantalla. Los objetos contados se conservan al salir del encuadre.'}</Text>
           {errorCamara && <TouchableOpacity style={styles.btn} onPress={() => Linking.openSettings()}><Text style={styles.btnText}>Abrir ajustes</Text></TouchableOpacity>}
         </View>
       )}
@@ -344,8 +354,8 @@ export default function CameraScreen() {
 
       {!modalVisible && resultadoFinal === null && cajasGuardadas.length > 0 && (
         <View style={styles.detectionLayer} pointerEvents="none">
-          {cajasGuardadas.map((caja) => (
-            <View key={caja.id} style={[styles.detectionBox, (() => {
+          {cajasGuardadas.map((caja, indice) => (
+            <View key={`${caja.id}-${indice}`} style={[styles.detectionBox, { borderColor: caja.confirmado ? '#4ade80' : '#fbbf24' }, (() => {
               const escala = Math.max(
                 tamanoPreview.width / caja.frame_width,
                 tamanoPreview.height / caja.frame_height,
@@ -361,8 +371,8 @@ export default function CameraScreen() {
                 height: caja.h * altoRender,
               };
             })()]}>
-              <Text style={styles.detectionId} numberOfLines={1}>
-                #{caja.id} {Math.round(caja.confianza * 100)}%
+              <Text style={[styles.detectionId, { backgroundColor: caja.confirmado ? '#4ADE80' : '#fbbf24' }]} numberOfLines={1}>
+                {caja.confirmado ? `#${caja.id} contado` : 'Detectado · por confirmar'}
               </Text>
             </View>
           ))}
@@ -371,7 +381,7 @@ export default function CameraScreen() {
 
       {!modalVisible && !preparandoAr && <View style={styles.menuButton}><AppMenu /></View>}
 
-      {objetoReferencia && (
+      {objetoReferencia && !isDetecting && (
         <View style={styles.referenceBox}>
           <Image source={{ uri: objetoReferencia.imagenUri }} style={styles.referenceImage} />
           <Text style={styles.referenceText} numberOfLines={2}>
@@ -389,7 +399,13 @@ export default function CameraScreen() {
       {isDetecting && (
         <View style={styles.totalBadge}>
           <Text style={styles.totalLabel}>{objetoReferencia?.nombreUsuario ?? 'Objetos'}</Text>
-          <Text style={styles.totalNum}>{totalContado}</Text>
+          <Text style={styles.totalNum}>{totalContado} contados</Text>
+        </View>
+      )}
+
+      {isDetecting && (
+        <View pointerEvents="none" style={styles.scanStatus}>
+          <Text style={styles.scanStatusText}>{estadoBarrido}</Text>
         </View>
       )}
 
@@ -397,8 +413,8 @@ export default function CameraScreen() {
         <TouchableOpacity style={styles.navBtn} onPress={() => router.back()}>
           <Text style={styles.navBackText}>‹</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navBtn} onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}>
-          <Text style={styles.flipText}>Voltear</Text>
+        <TouchableOpacity disabled={isDetecting} style={[styles.navBtn, isDetecting && styles.disabledBtn]} onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}>
+          <Text style={styles.flipText}>Girar</Text>
         </TouchableOpacity>
 
         <Pressable
@@ -406,13 +422,9 @@ export default function CameraScreen() {
           onPress={isDetecting ? finalizarConteo : iniciarConteo}
           disabled={!objetoReferencia && !isDetecting}
         >
-          <Text style={styles.captureText}>{isDetecting ? 'Detener' : 'Contar'}</Text>
+          <Text style={styles.captureText}>{isDetecting ? 'Finalizar' : 'Contar'}</Text>
         </Pressable>
-        {!isDetecting && objetoReferencia && (
-          <TouchableOpacity style={styles.nativeArBtn} onPress={iniciarConteoAr}>
-            <Text style={styles.nativeArBtnText}>Escanear en AR</Text>
-          </TouchableOpacity>
-        )}
+
       </View>
 
       {reporteGuardado && (
@@ -435,6 +447,7 @@ export default function CameraScreen() {
 
       {/* MODAL DE REFERENCIA */}
       <Modal visible={modalVisible} animationType="slide">
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#10151c' }}>
         <View style={styles.modalContainer}>
 
           {etapa === 'camara' && (
@@ -460,10 +473,10 @@ export default function CameraScreen() {
                   <Text style={styles.navBackText}>‹</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.navBtn} onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}>
-                  <Text style={styles.flipText}>Voltear</Text>
+                  <Text style={styles.flipText}>Girar</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.captureBtn} onPress={tomarFotoEnModal} disabled={capturando}>
-                  {capturando ? <ActivityIndicator color="#111" /> : <Text style={styles.captureText}>Contar</Text>}
+                  {capturando ? <ActivityIndicator color="#111" /> : <Text style={styles.captureText}>Capturar</Text>}
                 </TouchableOpacity>
               </View>
             </>
@@ -483,14 +496,14 @@ export default function CameraScreen() {
               />
               <View style={styles.confirmBtns}>
                 <TouchableOpacity style={styles.retakeBtn} onPress={retomarFoto}>
-                  <Text style={styles.retakeBtnText}>🔄 Retomar</Text>
+                  <Text style={styles.retakeBtnText}>Repetir foto</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.confirmBtn, (!nombreUsuario.trim() || !seleccionReferencia) && styles.confirmBtnDisabled]}
                   onPress={confirmarNombreYBuscar}
                   disabled={!nombreUsuario.trim() || !seleccionReferencia}
                 >
-                  <Text style={styles.confirmBtnText}>✅ Confirmar</Text>
+                  <Text style={styles.confirmBtnText}>Confirmar</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -511,26 +524,30 @@ export default function CameraScreen() {
                 <View style={styles.yoloBadge}>
                   <Text style={styles.yoloBadgeText}>
                     {claseYoloLocal
-                      ? `YOLO: ${claseYoloLocal}${confianzaLocal ? ` (${Math.round(confianzaLocal * 100)}%)` : ''}`
-                      : '⚠️ No identificado'}
+                      ? 'Referencia identificada'
+                      : 'Referencia no disponible'}
                   </Text>
                 </View>
               </View>
               <Text style={styles.confirmHint}>Nombre elegido: "{nombreUsuario}"</Text>
               <View style={styles.confirmBtns}>
                 <TouchableOpacity style={styles.retakeBtn} onPress={retomarFoto}>
-                  <Text style={styles.retakeBtnText}>🔄 Retomar</Text>
+                  <Text style={styles.retakeBtnText}>Repetir foto</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.confirmBtn} onPress={confirmarFinal}>
-                  <Text style={styles.confirmBtnText}>✅ Usar como referencia</Text>
+                <TouchableOpacity
+                  style={styles.confirmBtn}
+                  onPress={claseYoloLocal && referenciaIdLocal ? confirmarFinal : confirmarNombreYBuscar}>
+                  <Text style={styles.confirmBtnText}>{claseYoloLocal && referenciaIdLocal ? 'Usar referencia' : 'Reintentar identificación'}</Text>
                 </TouchableOpacity>
               </View>
             </View>
           )}
 
         </View>
+      </SafeAreaView>
       </Modal>
     </View>
+    </SafeAreaView>
   );
 }
 
@@ -540,7 +557,7 @@ const styles = StyleSheet.create({
   detectionLayer: { ...StyleSheet.absoluteFillObject },
   detectionBox: { position: 'absolute', borderWidth: 2, borderColor: '#F59E0B', backgroundColor: 'rgba(245,158,11,0.08)' },
   detectionId: { position: 'absolute', top: -22, left: -2, color: '#111', backgroundColor: '#F59E0B', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4, fontSize: 10, fontWeight: '900', minWidth: 58 },
-  menuButton: { position: 'absolute', top: 42, left: 10, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 22 },
+  menuButton: { position: 'absolute', top: 8, left: 10,  },
   centered:         { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   message:          { fontSize: 16, textAlign: 'center', color: '#fff' },
   referenceBox: {
@@ -560,15 +577,18 @@ const styles = StyleSheet.create({
   },
   clearBtnText:     { color: '#fff', fontSize: 10 },
   totalBadge: {
-    position: 'absolute', top: 98, left: 16,
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    borderRadius: 16, paddingHorizontal: 20, paddingVertical: 12,
+    position: 'absolute', top: 50, right: 16,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6,
     borderWidth: 1.5, borderColor: '#4ADE80', alignItems: 'center',
   },
   totalLabel:       { color: '#aaa', fontSize: 11, marginBottom: 2 },
-  totalNum:         { color: '#4ADE80', fontSize: 42, fontWeight: '800', lineHeight: 46 },
+  totalNum:         { color: '#4ADE80', fontSize: 24, fontWeight: '800', lineHeight: 28 },
+  scanStatus: { position: 'absolute', bottom: 104, left: 16, right: 16,
+    borderRadius: 8, padding: 8, backgroundColor: 'rgba(0,0,0,0.65)' },
+  scanStatusText: { color: '#fff', fontSize: 12, textAlign: 'center' },
   controls: {
-    position: 'absolute', bottom: 50, left: 0, right: 0,
+    position: 'absolute', bottom: 16, left: 0, right: 0,
     flexDirection: 'row', justifyContent: 'center',
     alignItems: 'center', gap: 14,
   },
@@ -590,7 +610,7 @@ const styles = StyleSheet.create({
   nativeArBtn: { backgroundColor: '#185FA5', borderRadius: 22, paddingHorizontal: 14, paddingVertical: 12, maxWidth: 96, alignItems: 'center' },
   nativeArBtnText: { color: '#fff', fontSize: 11, lineHeight: 14, textAlign: 'center', fontWeight: '800' },
   historyHint: {
-    position: 'absolute', bottom: 132, left: 24, right: 24,
+    position: 'absolute', bottom: 104, left: 24, right: 24,
     alignItems: 'center',
   },
   historyHintText: { color: '#fff', fontSize: 12, backgroundColor: 'rgba(0,0,0,0.65)', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 12 },
@@ -601,14 +621,14 @@ const styles = StyleSheet.create({
   btnText:          { color: '#fff' },
   modalContainer:   { flex: 1, backgroundColor: '#000' },
   modalCamera:      { flex: 1 },
-  modalMenu: { position: 'absolute', top: 42, left: 10, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 22 },
+  modalMenu: { position: 'absolute', top: 8, left: 10,  },
   modalHint: {
     position: 'absolute', top: 98, left: 20, right: 20,
     textAlign: 'center', color: '#fff', fontSize: 15,
     backgroundColor: 'rgba(0,0,0,0.5)', paddingVertical: 8,
   },
   modalControls: {
-    position: 'absolute', bottom: 50, left: 0, right: 0,
+    position: 'absolute', bottom: 16, left: 0, right: 0,
     flexDirection: 'row', justifyContent: 'center',
     alignItems: 'center', gap: 14,
   },

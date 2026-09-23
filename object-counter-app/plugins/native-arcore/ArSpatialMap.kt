@@ -8,11 +8,20 @@ import com.google.ar.core.TrackingState
 class ArSpatialMap {
   class Marca(private val referencia: Anchor, private val local: Pose) {
     var radioAsociacion = 0.018f
+    var usaProfundidad = false
     val pose: Pose get() = referencia.pose.compose(local)
     val trackingState: TrackingState get() = referencia.trackingState
   }
 
   private val regiones = mutableListOf<Anchor>()
+  // Las cámaras de capturas pendientes nunca son regiones de objetos.
+  private val capturas = mutableSetOf<Anchor>()
+
+  fun crearCaptura(crear: () -> Anchor): Anchor = crear().also { capturas.add(it) }
+
+  fun liberarCaptura(ancla: Anchor) {
+    if (capturas.remove(ancla)) ancla.detach()
+  }
 
   fun ubicar(pose: Pose, crear: () -> Anchor): Marca {
     val cercana = regiones.filter { it.trackingState == TrackingState.TRACKING }
@@ -25,6 +34,8 @@ class ArSpatialMap {
   fun limpiar() {
     regiones.forEach { it.detach() }
     regiones.clear()
+    capturas.forEach { it.detach() }
+    capturas.clear()
   }
 
   private fun distancia2(a: Pose, b: Pose): Float =

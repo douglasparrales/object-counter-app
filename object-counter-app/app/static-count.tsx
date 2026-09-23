@@ -1,3 +1,4 @@
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Modal, PanResponder, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
@@ -114,7 +115,7 @@ export default function StaticCountScreen() {
       console.log('[Foto directa] Resultado:', data);
     } catch (error: any) {
       console.log('[Foto directa] Error:', error?.message ?? error);
-      Alert.alert('Error', 'No se pudo analizar la foto. Revisa que el backend esté accesible.');
+      Alert.alert('Error', 'No se pudo analizar la foto. Comprueba la conexión e inténtalo de nuevo.');
     } finally {
       setProcesando(false);
     }
@@ -178,7 +179,6 @@ export default function StaticCountScreen() {
       });
     } catch (error) {
       console.log('[Foto directa] Error guardando:', error);
-      Alert.alert('Error', 'No se pudo guardar el reporte.');
       throw error;
     }
   };
@@ -187,17 +187,19 @@ export default function StaticCountScreen() {
   if (!device) return <View style={styles.center}><Text style={styles.text}>No se encontró cámara.</Text></View>;
 
   return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#10151c' }}>
     <View style={styles.container} {...gestoHistorial.panHandlers}>
       {foto ? <Image source={{ uri: foto }} style={styles.camera} /> : <Camera ref={cameraRef} style={styles.camera} device={device} isActive={!procesando} photo />}
       <View style={styles.menu}><AppMenu /></View>
       <View style={styles.top}><Text style={styles.title}>Conteo desde foto</Text><Text style={styles.hint}>Encuadra todos los objetos y toma una sola foto.</Text></View>
       <View style={styles.bottom}>
         <TouchableOpacity style={styles.navBtn} onPress={() => router.back()}><Text style={styles.navBackText}>‹</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.navBtn} onPress={() => setFacing((actual) => actual === 'back' ? 'front' : 'back')}><Text style={styles.navText}>Voltear</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.navBtn} onPress={() => setFacing((actual) => actual === 'back' ? 'front' : 'back')}><Text style={styles.navText}>Girar</Text></TouchableOpacity>
         {procesando ? <View style={styles.capture}><ActivityIndicator color="#10151c" /></View> : <TouchableOpacity style={styles.capture} onPress={tomarYContar}><Text style={styles.captureText}>Contar</Text></TouchableOpacity>}
       </View>
       {reporteGuardado && <View style={styles.historyHint}><Text style={styles.historyHintText}>Desliza hacia la izquierda para ver los reportes</Text></View>}
       <Modal visible={foto !== null && resultado === null} animationType="slide" onRequestClose={() => setFoto(null)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#10151c' }}>
         <View style={styles.selectorContainer}>
           <View style={styles.selectorHeader}>
             <Text style={styles.selectorTitle}>Selecciona un ejemplar</Text>
@@ -230,8 +232,10 @@ export default function StaticCountScreen() {
             </TouchableOpacity>
           </View>
         </View>
+      </SafeAreaView>
       </Modal>
       <Modal visible={resultado !== null && !mostrarGuardado} animationType="slide" onRequestClose={() => { setResultado(null); setFoto(null); }}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#10151c' }}>
         <View style={styles.auditContainer}>
           <View style={styles.auditHeader}>
             <View><Text style={styles.auditTitle}>Revisión del conteo</Text><Text style={styles.auditTotal}>{resultado?.total ?? 0} candidatos</Text></View>
@@ -281,6 +285,7 @@ export default function StaticCountScreen() {
             <TouchableOpacity style={styles.auditContinue} onPress={() => setMostrarGuardado(true)}><Text style={styles.auditContinueText}>Continuar</Text></TouchableOpacity>
           </View>
         </View>
+      </SafeAreaView>
       </Modal>
       <SaveReportModal
         visible={resultado !== null && mostrarGuardado}
@@ -295,6 +300,7 @@ export default function StaticCountScreen() {
         onSaved={() => setReporteGuardado(true)}
       />
     </View>
+    </SafeAreaView>
   );
 }
 
@@ -302,11 +308,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' }, camera: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#10151c', padding: 24 },
   text: { color: '#fff', fontSize: 16 }, action: { backgroundColor: '#4ADE80', marginTop: 18, borderRadius: 12, padding: 13 }, actionText: { color: '#10151c', fontWeight: '800' },
-  menu: { position: 'absolute', top: 42, left: 10, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 22 },
-  top: { position: 'absolute', top: 98, left: 20, right: 20, backgroundColor: 'rgba(0,0,0,0.62)', borderRadius: 12, padding: 12 }, title: { color: '#fff', fontSize: 18, fontWeight: '800' }, hint: { color: '#c0c8d0', marginTop: 4, fontSize: 13 },
+  menu: { position: 'absolute', top: 8, left: 10,  },
+  top: { position: 'absolute', top: 64, left: 20, right: 20, backgroundColor: 'rgba(0,0,0,0.62)', borderRadius: 12, padding: 12 }, title: { color: '#fff', fontSize: 18, fontWeight: '800' }, hint: { color: '#c0c8d0', marginTop: 4, fontSize: 13 },
   historyHint: { position: 'absolute', bottom: 110, left: 24, right: 24, alignItems: 'center' }, historyHintText: { color: '#fff', fontSize: 12, backgroundColor: 'rgba(0,0,0,0.65)', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 12 },
-  bottom: { position: 'absolute', bottom: 50, left: 20, right: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 14 }, navBtn: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 24, minWidth: 46, paddingHorizontal: 14, paddingVertical: 10, justifyContent: 'center', alignItems: 'center' }, navBackText: { color: '#fff', fontSize: 30, lineHeight: 20 }, navText: { color: '#fff', fontSize: 13 }, capture: { width: 76, height: 76, backgroundColor: '#4ADE80', borderRadius: 38, justifyContent: 'center', alignItems: 'center' }, captureText: { color: '#10151c', fontWeight: '700', fontSize: 13 },
-  auditContainer: { flex: 1, backgroundColor: '#0b1016', paddingTop: 48, paddingHorizontal: 16, paddingBottom: 24 },
+  bottom: { position: 'absolute', bottom: 16, left: 20, right: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 14 }, navBtn: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 24, minWidth: 46, paddingHorizontal: 14, paddingVertical: 10, justifyContent: 'center', alignItems: 'center' }, navBackText: { color: '#fff', fontSize: 30, lineHeight: 20 }, navText: { color: '#fff', fontSize: 13 }, capture: { width: 76, height: 76, backgroundColor: '#4ADE80', borderRadius: 38, justifyContent: 'center', alignItems: 'center' }, captureText: { color: '#10151c', fontWeight: '700', fontSize: 13 },
+  auditContainer: { flex: 1, backgroundColor: '#0b1016', paddingTop: 16, paddingHorizontal: 16, paddingBottom: 24 },
   auditHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   auditTitle: { color: '#fff', fontSize: 21, fontWeight: '800' }, auditTotal: { color: '#4ADE80', fontSize: 15, marginTop: 2, fontWeight: '700' },
   auditClose: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#242c35', alignItems: 'center', justifyContent: 'center' }, auditCloseText: { color: '#fff', fontSize: 30, lineHeight: 32 },
@@ -323,7 +329,7 @@ const styles = StyleSheet.create({
   auditActions: { flexDirection: 'row', gap: 12, marginTop: 14 },
   auditRetake: { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 12, backgroundColor: '#29323c' }, auditRetakeText: { color: '#fff', fontWeight: '700' },
   auditContinue: { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 12, backgroundColor: '#4ADE80' }, auditContinueText: { color: '#10151c', fontWeight: '800' },
-  selectorContainer: { flex: 1, backgroundColor: '#0b1016', paddingTop: 48, paddingHorizontal: 16, paddingBottom: 24 },
+  selectorContainer: { flex: 1, backgroundColor: '#0b1016', paddingTop: 16, paddingHorizontal: 16, paddingBottom: 24 },
   selectorHeader: { marginBottom: 12 }, selectorTitle: { color: '#fff', fontSize: 22, fontWeight: '800' }, selectorHint: { color: '#aab4bf', fontSize: 13, marginTop: 5 },
   selectorImageContainer: { flex: 1, overflow: 'hidden', borderRadius: 14, backgroundColor: '#000', borderWidth: 1, borderColor: '#303b46' },
   selectionBox: { position: 'absolute', borderWidth: 3, borderColor: '#4ADE80', backgroundColor: 'rgba(74,222,128,0.14)' },

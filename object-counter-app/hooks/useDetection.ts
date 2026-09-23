@@ -1,15 +1,16 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import type { Camera } from 'react-native-vision-camera';
+import { File } from 'expo-file-system';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import type { SeleccionReferencia } from '../components/ReferenceSelector';
 import {
   identificarReferencia,
-  proveedorBackend,
-  type DeteccionTiempoReal,
-  type ProveedorDeteccionTiempoReal,
+  crearBarrido, cerrarBarrido, detectarBarrido,
 } from '../services/realtimeDetection';
 
 export type CajaGuardada = {
+  confirmado?: boolean;
   id: number;
   clase: string;
   confianza: number;
@@ -20,9 +21,6 @@ export type CajaGuardada = {
   frame_width: number;
   frame_height: number;
 };
-
-type Track = CajaGuardada & { vistas: number; confirmado: boolean; ultimoVisto: number };
-type DeteccionRemota = DeteccionTiempoReal;
 
 export type ObjetoReferencia = {
   claseYolo: string;
@@ -39,63 +37,23 @@ export type ResultadoIdentificacion = {
 };
 
 const INTERVAL_MS = 400;
-const IOU_MINIMO = 0.18;
-const FRAMES_PARA_CONFIRMAR = 2;
-const TIEMPO_MAXIMO_PARA_ASOCIAR_MS = 2200;
-const VENTANA_CONTEO_ESTABLE = 9;
-const SUAVIZADO_CAJA = 0.75;
-
-function mediana(valores: number[]) {
-  const ordenados = [...valores].sort((a, b) => a - b);
-  const mitad = Math.floor(ordenados.length / 2);
-  return ordenados.length % 2
-    ? ordenados[mitad]
-    : Math.round((ordenados[mitad - 1] + ordenados[mitad]) / 2);
-}
-
-function interpolar(actual: number, siguiente: number) {
-  return actual + (siguiente - actual) * SUAVIZADO_CAJA;
-}
-
-function distancia(a: CajaGuardada, b: DeteccionRemota) {
-  return Math.hypot(a.cx - b.cx, a.cy - b.cy);
-}
-
-function iou(a: CajaGuardada, b: DeteccionRemota) {
-  const ax1 = a.cx - a.w / 2;
-  const ay1 = a.cy - a.h / 2;
-  const ax2 = a.cx + a.w / 2;
-  const ay2 = a.cy + a.h / 2;
-  const bx1 = b.cx - b.w / 2;
-  const by1 = b.cy - b.h / 2;
-  const bx2 = b.cx + b.w / 2;
-  const by2 = b.cy + b.h / 2;
-  const interseccion = Math.max(0, Math.min(ax2, bx2) - Math.max(ax1, bx1))
-    * Math.max(0, Math.min(ay2, by2) - Math.max(ay1, by1));
-  const union = a.w * a.h + b.w * b.h - interseccion;
-  return union > 0 ? interseccion / union : 0;
-}
-
-function limiteDistancia(a: CajaGuardada, b: DeteccionRemota) {
-  const tamano = Math.max(a.w, a.h, b.w, b.h);
-  return Math.max(0.045, Math.min(0.12, tamano * 0.75));
-}
-
-export function useDetection(proveedor: ProveedorDeteccionTiempoReal = proveedorBackend) {
+export function useDetection() {
   const [cajasGuardadas, setCajasGuardadas] = useState<CajaGuardada[]>([]);
   const [totalContado, setTotalContado] = useState(0);
   const [isDetecting, setIsDetecting] = useState(false);
   const [objetoReferencia, setObjetoReferencia] = useState<ObjetoReferencia | null>(null);
   const [identificando, setIdentificando] = useState(false);
   const [claseDetectada, setClaseDetectada] = useState<string | null>(null);
+  const [estadoBarrido, setEstadoBarrido] = useState('');
+  const generacion = useRef(0);
+  const sesionRef = useRef<string | null>(null);
+  const pendienteRef = useRef<Promise<void> | null>(null);
+  const terminandoRef = useRef(false);
 
   const cameraRef = useRef<Camera | null>(null);
   const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isRunning = useRef(false);
-  const tracksRef = useRef<Track[]>([]);
-  const siguienteIdRef = useRef(1);
   const totalRef = useRef(0);
-  const muestrasConteoRef = useRef<number[]>([]);
 
   const identificarFoto = useCallback(async (uri: string, promptEs: string, seleccion: SeleccionReferencia): Promise<ResultadoIdentificacion> => {
     setIdentificando(true);
@@ -115,86 +73,6 @@ export function useDetection(proveedor: ProveedorDeteccionTiempoReal = proveedor
     }
   }, []);
 
-  const actualizarTracks = useCallback((detecciones: DeteccionRemota[]) => {
-    const ahora = Date.now();
-    // En 2D no existe información espacial suficiente para reconocer que un
-    // objeto que reaparece tras mover la cámara es el mismo objeto físico.
-    // Conservamos tracks recientes para estabilizar cajas, no para acumularlos.
-    const tracks = tracksRef.current.filter(
-      (track) => ahora - track.ultimoVisto <= TIEMPO_MAXIMO_PARA_ASOCIAR_MS,
-    );
-    const tracksUsados = new Set<number>();
-    const tracksVistosAhora = new Set<number>();
-
-    for (const deteccion of detecciones) {
-      let mejorTrack: Track | undefined;
-      let mejorPuntaje = -1;
-      for (const track of tracks) {
-        if (tracksUsados.has(track.id)) continue;
-        if (ahora - track.ultimoVisto > TIEMPO_MAXIMO_PARA_ASOCIAR_MS) continue;
-        const solapamiento = iou(track, deteccion);
-        const distanciaCentro = distancia(track, deteccion);
-        const distanciaPermitida = limiteDistancia(track, deteccion);
-        if (solapamiento < IOU_MINIMO && distanciaCentro > distanciaPermitida) continue;
-        const puntaje = solapamiento * 2 + (1 - distanciaCentro / distanciaPermitida);
-        if (puntaje > mejorPuntaje) {
-          mejorTrack = track;
-          mejorPuntaje = puntaje;
-        }
-      }
-
-      if (mejorTrack) {
-        // El ID permanece asociado al objeto mientras la caja se desplaza de
-        // forma gradual. Esto evita el temblor visual sin alterar el conteo.
-        Object.assign(mejorTrack, {
-          clase: deteccion.clase,
-          confianza: deteccion.confianza,
-          cx: interpolar(mejorTrack.cx, deteccion.cx),
-          cy: interpolar(mejorTrack.cy, deteccion.cy),
-          w: interpolar(mejorTrack.w, deteccion.w),
-          h: interpolar(mejorTrack.h, deteccion.h),
-          frame_width: deteccion.frame_width,
-          frame_height: deteccion.frame_height,
-          ultimoVisto: ahora,
-          vistas: mejorTrack.vistas + 1,
-        });
-        tracksUsados.add(mejorTrack.id);
-        tracksVistosAhora.add(mejorTrack.id);
-      } else {
-        const nuevoTrack: Track = { id: siguienteIdRef.current++, ...deteccion, vistas: 1, confirmado: false, ultimoVisto: ahora };
-        tracks.push(nuevoTrack);
-        tracksVistosAhora.add(nuevoTrack.id);
-      }
-    }
-
-    for (const track of tracks) {
-      if (!track.confirmado && track.vistas >= FRAMES_PARA_CONFIRMAR) {
-        track.confirmado = true;
-        console.log(`[Tracking] Objeto estable confirmado #${track.id}.`);
-      }
-    }
-
-    tracksRef.current = tracks;
-    const visibles = tracks
-      .filter((track) => track.confirmado && tracksVistosAhora.has(track.id))
-      .map(({ vistas, confirmado, ultimoVisto, ...caja }) => caja);
-    // Resultado 2D: mediana temporal de detecciones positivas. Un objeto que
-    // se pierde unos frames o una mancha ocasional no altera el resultado.
-    if (detecciones.length > 0) {
-      const totalAnterior = totalRef.current;
-      muestrasConteoRef.current.push(detecciones.length);
-      if (muestrasConteoRef.current.length > VENTANA_CONTEO_ESTABLE) {
-        muestrasConteoRef.current.shift();
-      }
-      totalRef.current = mediana(muestrasConteoRef.current);
-      if (totalRef.current !== totalAnterior) {
-        console.log(`[Conteo 2D] Estimación estable: ${totalRef.current} (${muestrasConteoRef.current.length} muestras).`);
-      }
-    }
-    setCajasGuardadas(visibles);
-    setTotalContado(totalRef.current);
-  }, []);
-
   const confirmarObjeto = useCallback((claseYolo: string, nombreUsuario: string, imagenUri: string, referenciaId: string | null) => {
     setObjetoReferencia({ claseYolo, nombreUsuario, imagenUri, referenciaId });
     setClaseDetectada(null);
@@ -209,42 +87,68 @@ export function useDetection(proveedor: ProveedorDeteccionTiempoReal = proveedor
 
     cameraRef.current = camRef.current;
     isRunning.current = true;
-    tracksRef.current = [];
-    siguienteIdRef.current = 1;
+    const turno = ++generacion.current;
+    terminandoRef.current = false;
+    setEstadoBarrido('Preparando conteo · mantén los objetos quietos');
     totalRef.current = 0;
-    muestrasConteoRef.current = [];
     setCajasGuardadas([]);
     setTotalContado(0);
     setIsDetecting(true);
     console.log('[Detección] Sesión iniciada con tracking de IDs persistentes.');
 
+    let secuencia = 0;
     const tick = async () => {
-      if (!isRunning.current || !cameraRef.current) return;
+      if (!isRunning.current || turno !== generacion.current || !cameraRef.current) return;
+      const archivos: string[] = [];
       try {
-        const photo = await cameraRef.current.takePhoto({ quality: 0.5 } as any);
-        const detecciones = await proveedor.detectar(
-          `file://${photo.path}`,
-          objetoReferencia?.claseYolo ?? '',
-          objetoReferencia?.referenciaId ?? null,
-        );
-        if (!isRunning.current) return;
-        console.log(`[Detección] Frame recibido: ${detecciones.length} objetos.`);
-        actualizarTracks(detecciones);
+        if (!sesionRef.current) {
+          if (!objetoReferencia?.referenciaId) throw new Error('Selecciona una referencia válida antes de contar.');
+          const creada = await crearBarrido(objetoReferencia.referenciaId);
+          if (!isRunning.current || turno !== generacion.current) { void cerrarBarrido(creada); return; }
+          sesionRef.current = creada;
+        }
+        const photo = await cameraRef.current.takePhoto();
+        const uri = `file://${photo.path}`;
+        archivos.push(uri);
+        const resized = await manipulateAsync(uri, [{ resize: photo.width > photo.height ? { width: 1280 } : { height: 1280 } }],
+          { compress: 0.8, format: SaveFormat.JPEG });
+        archivos.push(resized.uri);
+        if (!isRunning.current || turno !== generacion.current) return;
+        const resultado = await detectarBarrido(resized.uri, objetoReferencia?.claseYolo ?? '',
+          objetoReferencia?.referenciaId ?? '', sesionRef.current!, secuencia++);
+        if (!isRunning.current || turno !== generacion.current) return;
+        totalRef.current = resultado.total;
+        setTotalContado(resultado.total);
+        setCajasGuardadas(resultado.objetos);
+        setEstadoBarrido(resultado.estado === 'SIN_COINCIDENCIA'
+          ? 'Total conservado · vuelve a una zona ya vista y avanza con más solapamiento'
+          : resultado.estado === 'INICIANDO' ? 'Mantén la cámara quieta para confirmar los primeros objetos'
+          : 'Conteo activo · avanza despacio · verde: contado, amarillo: pendiente');
+        console.log('[Barrido]', JSON.stringify({ total: resultado.total, estado: resultado.estado, visibles: resultado.objetos.length }));
       } catch (error: any) {
         // Detener desmonta la cámara mientras puede quedar una petición en
         // vuelo. Su cancelación es esperada y no debe mostrarse como error.
-        if (isRunning.current) {
+        if (isRunning.current && turno === generacion.current) {
           console.log('[Detección] Error en frame:', error?.message ?? error);
+          setEstadoBarrido(`Total conservado · ${error?.message ?? 'No se pudo analizar la imagen'}`);
+          setCajasGuardadas([]);
         }
+      } finally {
+        for (const uri of archivos) { try { new File(uri).delete(); } catch {} }
       }
-      if (isRunning.current) intervalRef.current = setTimeout(tick, INTERVAL_MS);
+      if (isRunning.current && turno === generacion.current && !terminandoRef.current)
+        intervalRef.current = setTimeout(() => { pendienteRef.current = tick(); }, INTERVAL_MS);
     };
 
-    tick();
-  }, [actualizarTracks, objetoReferencia, proveedor]);
+    pendienteRef.current = tick();
+  }, [objetoReferencia]);
 
   const stopDetection = useCallback(() => {
     isRunning.current = false;
+    generacion.current += 1;
+    const sesion = sesionRef.current;
+    sesionRef.current = null;
+    if (sesion) void cerrarBarrido(sesion);
     setIsDetecting(false);
     if (intervalRef.current) clearTimeout(intervalRef.current);
     intervalRef.current = null;
@@ -252,20 +156,29 @@ export function useDetection(proveedor: ProveedorDeteccionTiempoReal = proveedor
     return totalRef.current;
   }, []);
 
+  const finishDetection = useCallback(async () => {
+    terminandoRef.current = true;
+    if (intervalRef.current) clearTimeout(intervalRef.current);
+    setEstadoBarrido('Terminando la última imagen…');
+    await pendienteRef.current;
+    return stopDetection();
+  }, [stopDetection]);
+
   const limpiarReferencia = useCallback(() => {
+    stopDetection();
     isRunning.current = false;
     if (intervalRef.current) clearTimeout(intervalRef.current);
     intervalRef.current = null;
-    tracksRef.current = [];
-    muestrasConteoRef.current = [];
     setObjetoReferencia(null);
     setCajasGuardadas([]);
     setTotalContado(0);
     setClaseDetectada(null);
-  }, []);
+  }, [stopDetection]);
 
   useEffect(() => () => {
     isRunning.current = false;
+    generacion.current += 1;
+    if (sesionRef.current) void cerrarBarrido(sesionRef.current);
     if (intervalRef.current) clearTimeout(intervalRef.current);
   }, []);
 
@@ -281,6 +194,8 @@ export function useDetection(proveedor: ProveedorDeteccionTiempoReal = proveedor
     confirmarObjeto,
     startDetection,
     stopDetection,
+    finishDetection,
+    estadoBarrido,
     limpiarReferencia,
   };
 }

@@ -1,8 +1,10 @@
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRef, useState } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 export default function AppMenu() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const [visible, setVisible] = useState(false);
   const progreso = useRef(new Animated.Value(0)).current;
@@ -27,13 +29,13 @@ export default function AppMenu() {
       <Modal visible={visible} transparent animationType="none" onRequestClose={() => cerrar()}>
         <View style={styles.overlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => cerrar()} />
-          <Animated.View style={[styles.drawer, { transform: [{ translateX: progreso.interpolate({ inputRange: [0, 1], outputRange: [-300, 0] }) }] }]}>
+          <Animated.View style={[styles.drawer, { paddingTop: insets.top + 24 }, { transform: [{ translateX: progreso.interpolate({ inputRange: [0, 1], outputRange: [-300, 0] }) }] }]}>
             <Text style={styles.brand}>Object Counter</Text>
             <Text style={styles.subtitle}>Herramientas de conteo</Text>
-            <TouchableOpacity style={styles.item} onPress={() => mover('/history')}><Text style={styles.itemText}>▤  Reportes</Text></TouchableOpacity>
-            <TouchableOpacity style={styles.item} onPress={() => mover('/about')}><Text style={styles.itemText}>ⓘ  Acerca de</Text></TouchableOpacity>
-            <TouchableOpacity style={styles.item} onPress={() => mover('/')}><Text style={styles.itemText}>⌂  Inicio</Text></TouchableOpacity>
-            <Text style={styles.version}>Versión 1.0.0</Text>
+            <TouchableOpacity style={styles.item} onPress={() => mover('/history')}><Text style={styles.itemText}>Reportes</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.item} onPress={() => mover('/about')}><Text style={styles.itemText}>Acerca de</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.item} onPress={() => mover('/')}><Text style={styles.itemText}>Inicio</Text></TouchableOpacity>
+            <Text style={[styles.version, { bottom: insets.bottom + 16 }]}>Versión 1.0.0</Text>
           </Animated.View>
         </View>
       </Modal>
@@ -42,7 +44,7 @@ export default function AppMenu() {
 }
 
 const styles = StyleSheet.create({
-  trigger: { width: 44, height: 44, justifyContent: 'center', gap: 5, paddingHorizontal: 10 },
+  trigger: { backgroundColor: 'rgba(16,21,28,0.7)', borderRadius: 12, width: 44, height: 44, justifyContent: 'center', gap: 5, paddingHorizontal: 10 },
   line: { height: 2.5, backgroundColor: '#fff', borderRadius: 2, width: 23 },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.48)' },
   drawer: { width: 286, height: '100%', backgroundColor: '#171d25', paddingTop: 64, paddingHorizontal: 22, borderRightWidth: 1, borderColor: '#34404c' },

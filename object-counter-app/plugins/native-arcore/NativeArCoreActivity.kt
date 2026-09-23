@@ -4,6 +4,11 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Matrix
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.opengl.GLES11Ext
@@ -16,10 +21,13 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.View
+import android.content.Context
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.ImageView
 import com.google.ar.core.Anchor
 import com.google.ar.core.ArCoreApk
 import com.google.ar.core.Config
@@ -33,6 +41,7 @@ import com.google.ar.core.Session
 import com.google.ar.core.TrackingState
 import com.google.ar.core.TrackingFailureReason
 import com.google.ar.core.exceptions.NotYetAvailableException
+import com.google.ar.core.exceptions.NotTrackingException
 import com.google.ar.core.exceptions.CameraNotAvailableException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -48,6 +57,8 @@ class NativeArCoreActivity : Activity() {
   private lateinit var estado: TextView
   private lateinit var total: TextView
   private lateinit var diagnostico: TextView
+  private lateinit var ultimaImagen: ImageView
+  private lateinit var etiquetas: ArLabelsView
   private lateinit var renderer: ArRenderer
   private var session: Session? = null
   private var instalacionSolicitada = false
@@ -95,6 +106,12 @@ class NativeArCoreActivity : Activity() {
       },
       onError = { codigo, mensaje -> runOnUiThread { mostrarError(codigo, mensaje) } },
       onDiagnostico = { mensaje -> runOnUiThread { if (!isFinishing) diagnostico.text = mensaje } },
+      onImagen = { bitmap -> runOnUiThread {
+        if (!isFinishing && !isDestroyed) ultimaImagen.setImageBitmap(bitmap)
+      } },
+      onMarcas = { marcas -> runOnUiThread {
+        if (!isFinishing) etiquetas.actualizar(marcas)
+      } },
       onFin = { advertencia -> runOnUiThread {
         if (!isFinishing) {
           if (advertencia == null) finalizar(true)
@@ -115,6 +132,8 @@ class NativeArCoreActivity : Activity() {
       true
     }
     raiz.addView(superficie, FrameLayout.LayoutParams(-1, -1))
+    etiquetas = ArLabelsView(this)
+    raiz.addView(etiquetas, FrameLayout.LayoutParams(-1, -1))
 
     val hud = LinearLayout(this).apply {
       orientation = LinearLayout.VERTICAL
@@ -147,6 +166,13 @@ class NativeArCoreActivity : Activity() {
       setTextColor(Color.LTGRAY)
     }
     hud.addView(diagnostico)
+    hud.addView(TextView(this).apply {
+      text = "Última imagen analizada · cajas blancas = detecciones, no confirmaciones"
+      textSize = 11f
+      setTextColor(Color.LTGRAY)
+    })
+    ultimaImagen = ImageView(this).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
+    hud.addView(ultimaImagen, LinearLayout.LayoutParams(-1, dp(112)))
     hud.addView(TextView(this).apply {
       text = "Azul: superficie · Amarillo: candidato · Verde: contado"
       textSize = 12f
@@ -238,6 +264,7 @@ class NativeArCoreActivity : Activity() {
           // Conservar la cámara recomendada por ARCore para este dispositivo.
           // La resolución máxima del stream CPU no implica mejor seguimiento.
           val config = Config(nueva).apply {
+            updateMode = Config.UpdateMode.BLOCKING
             planeFindingMode = Config.PlaneFindingMode.HORIZONTAL
             focusMode = Config.FocusMode.AUTO
             if (nueva.isDepthModeSupported(Config.DepthMode.AUTOMATIC)) {
@@ -355,7 +382,7 @@ class NativeArCoreActivity : Activity() {
   }
 
   companion object {
-    const val VERSION_AR = "2026.09.15.2"
+    const val VERSION_AR = "2026.09.22.2"
     const val EXTRA_NOMBRE = "nombre"
     const val EXTRA_CLASE = "clase"
     const val EXTRA_REFERENCIA_ID = "referencia_id"
@@ -376,6 +403,8 @@ private class ArRenderer(
   private val onEstado: (String, Int) -> Unit,
   private val onError: (String, String) -> Unit,
   private val onDiagnostico: (String) -> Unit,
+  private val onImagen: (Bitmap) -> Unit,
+  private val onMarcas: (List<ArLabel>) -> Unit,
   private val onFin: (String?) -> Unit,
 ) : GLSurfaceView.Renderer {
   private val toques = ConcurrentLinkedQueue<Pair<Float, Float>>()
@@ -422,6 +451,8 @@ private class ArRenderer(
   private var planosDisponibles = 0
   private var sinUbicar = 0
   private var inicioSinPlano = 0L
+  private var ultimaProfundidad = false
+  private var ultimasEtiquetas = 0L
   private val vertices = buffer(floatArrayOf(-1f, -1f, 1f, -1f, -1f, 1f, 1f, 1f))
   private val uv = buffer(FloatArray(8))
 
@@ -431,6 +462,7 @@ private class ArRenderer(
   }
 
   fun limpiarAnclas() {
+    onMarcas(emptyList())
     generacion.incrementAndGet()
     vaciarCapturas()
     synchronized(anclas) {
@@ -443,6 +475,7 @@ private class ArRenderer(
       avisoHasta = 0L
       capturasOmitidas = 0
       sinUbicar = 0
+      ultimaProfundidad = false
       inicioSinPlano = 0L
       falloDetector = false
       proximamente = 0L
@@ -487,6 +520,31 @@ private class ArRenderer(
   private fun vaciarCapturas() {
     while (capturasPendientes.isNotEmpty()) capturasPendientes.removeFirst().geometria.liberar()
     while (true) (resultados.poll() ?: break).geometria.liberar()
+  }
+
+  private fun descartarCapturasVencidas(ahora: Long) {
+    // Se ejecuta también durante las pausas. Un return del seguimiento no debe
+    // retener imágenes/anclas para siempre ni ocultar respuestas del detector.
+    var pendientes = resultados.size
+    while (pendientes-- > 0) {
+      val resultado = resultados.poll() ?: break
+      val invalida = resultado.generacion != generacion.get()
+      val limite = if (resultado.reintentarEn > 0L) 8000L else 30_000L
+      if (invalida || ahora - resultado.capturadoEn > limite) {
+        resultado.geometria.liberar()
+        if (!invalida) {
+          sinUbicar += resultado.detecciones.size
+          capturasOmitidas += 1
+          ArDiagnostics.event("captura_descartada", "frame" to resultado.loteId,
+            "motivo" to "GEOMETRIA_CADUCADA", "visibles" to resultado.detecciones.size)
+          avisar("Una imagen perdió su posición · repasa esa zona; el total confirmado se conserva")
+        }
+      } else resultados.add(resultado)
+    }
+    while (capturasPendientes.isNotEmpty() && ahora - capturasPendientes.peekFirst().capturadoEn > 8000L) {
+      capturasPendientes.removeFirst().geometria.liberar()
+      capturasOmitidas += 1
+    }
   }
 
   fun terminarCapturas() {
@@ -549,21 +607,28 @@ private class ArRenderer(
       }
       val frame = activa.update()
       val ahora = SystemClock.elapsedRealtime()
+      descartarCapturasVencidas(ahora)
       if (inicioEspera == 0L) inicioEspera = ahora
       if (frame.timestamp != 0L) dibujarCamara(frame)
+      val seguimiento = frame.camera.trackingState
       motivoTracking = frame.camera.trackingFailureReason.name
+      if (ultimoTracking != seguimiento) {
+        onMarcas(emptyList())
+        ultimoTracking = seguimiento
+      }
       planosDisponibles = activa.getAllTrackables(Plane::class.java).count {
         it.trackingState == TrackingState.TRACKING && it.subsumedBy == null &&
           it.type == Plane.Type.HORIZONTAL_UPWARD_FACING
       }
       if (ahora - ultimaTelemetria >= 2000L) {
         ultimaTelemetria = ahora
-        ArDiagnostics.event("seguimiento", "estado" to frame.camera.trackingState.name,
+        ArDiagnostics.event("seguimiento", "estado" to seguimiento.name,
           "motivo" to motivoTracking, "planos" to planosDisponibles,
           "frames_estables" to framesEstables, "resultados_pendientes" to resultados.size,
+          "confirmados_sin_tracking" to synchronized(anclas) { anclas.count { it.trackingState != TrackingState.TRACKING } },
           "total" to totalAnclas())
       }
-      if (frame.camera.trackingState != TrackingState.TRACKING) {
+      if (seguimiento != TrackingState.TRACKING) {
         if (trackingPausadoDesde == 0L) trackingPausadoDesde = ahora
         framesEstables = 0
         toques.clear()
@@ -571,10 +636,6 @@ private class ArRenderer(
           errorNotificado = true
           onError("ARCORE_TRACKING_TIMEOUT", "AR no logró recuperar el seguimiento en 30 segundos. Mejora la luz, incluye una superficie con detalles y pulsa Reintentar AR. El total confirmado se conserva.")
           return
-        }
-        if (ultimoTracking != frame.camera.trackingState) {
-          Log.d(TAG, "Tracking de cámara: ${frame.camera.trackingState}")
-          ultimoTracking = frame.camera.trackingState
         }
         val ayuda = when (frame.camera.trackingFailureReason) {
           TrackingFailureReason.INSUFFICIENT_LIGHT -> "Falta luz · ilumina la mesa sin reflejos y descubre la cámara"
@@ -611,10 +672,6 @@ private class ArRenderer(
         }
         return
       }
-      if (ultimoTracking != TrackingState.TRACKING) {
-        Log.d(TAG, "Tracking de cámara recuperado")
-        ultimoTracking = TrackingState.TRACKING
-      }
       procesarToques(frame)
       procesarDetecciones(frame)
       dibujarAnclas(frame)
@@ -628,10 +685,10 @@ private class ArRenderer(
         if (framesEstables < FRAMES_PARA_ANCLAR)
           "Estabilizando seguimiento · mueve la cámara lentamente"
         else if (finalizando) "Terminando análisis · conserva la cámara orientada a la superficie"
-        else if (!superficieDisponible && ahora - inicioSinPlano >= 15_000L)
+        else if (!superficieDisponible && !ultimaProfundidad && ahora - inicioSinPlano >= 15_000L)
           "Sin plano horizontal · incluye bordes o papel con dibujos, evita reflejos. Puedes volver a 2D."
         else if (ahora < avisoHasta) aviso
-        else if (!superficieDisponible)
+        else if (!superficieDisponible && !ultimaProfundidad)
           "Primero ubica la mesa · aléjate para incluir sus bordes y espera el contorno azul"
         else "Escaneo activo · recorre los objetos con movimiento lento y continuo"
       )
@@ -673,12 +730,23 @@ private class ArRenderer(
       val rotacionCaptura = try { imageRotation() } catch (_: Exception) { 0 }
       // Cerrar Image antes de abandonar el frame: pause/close nunca compiten
       // con una imagen nativa retenida por la petición de red.
-      val image = frame.acquireCameraImage().use { ArDetectionClient.copiarImagen(it) }
+      val image = frame.acquireCameraImage().use {
+        if (it.timestamp != frame.timestamp) return
+        ArDetectionClient.copiarImagen(it)
+      }
       val geometria = ArCaptureGeometry(frame, activa, mapa)
+      ultimaProfundidad = geometria.tieneProfundidad
+      diagnosticoDetector = "Imagen capturada · esperando análisis"
       ultimaSolicitud = ahora
       capturasPendientes.addLast(CapturaPendiente(image, rotacionCaptura, geometria, generacion.get(), ahora))
     } catch (_: NotYetAvailableException) {
       // ARCore puede no entregar imagen CPU en algunos frames.
+    } catch (_: NotTrackingException) {
+      // Transición transitoria entre la consulta de cámara y createAnchor.
+      // Reintentar pronto: el backoff de red de 2 s perdía todas las ventanas útiles.
+      ultimaProfundidad = false
+      proximamente = ahora + 150L
+      ArDiagnostics.event("captura_reintentada", "motivo" to "NOT_TRACKING")
     } catch (error: Exception) {
       proximamente = ahora + 2000L
       diagnosticoDetector = "Captura no disponible: ${error.javaClass.simpleName}"
@@ -695,15 +763,22 @@ private class ArRenderer(
         val inicio = SystemClock.elapsedRealtime()
         var error: String? = null
         val detecciones = try {
-          ArDetectionClient.detectar(backendUrl, clase, referenciaId, captura.rotacion,
-            ArDetectionClient.imageToJpeg(captura.imagen), captura.capturadoEn)
+          val jpeg = ArDetectionClient.imageToJpeg(captura.imagen)
+          val objetos = ArDetectionClient.detectar(backendUrl, clase, referenciaId, captura.rotacion,
+            jpeg, captura.capturadoEn)
+          if (!cerrado && generacion.get() == captura.generacion) {
+            // El preview pertenece a la captura, nunca a la cámara actual.
+            runCatching { onImagen(imagenAnotada(jpeg, objetos, captura.rotacion)) }
+          }
+          objetos
         } catch (fallo: Exception) {
           error = fallo.message ?: fallo.javaClass.simpleName
           Log.w(TAG, "No se pudo analizar la captura", fallo)
           ArDiagnostics.event("detector_error", "frame" to captura.capturadoEn, "detalle" to error)
           emptyList()
         }
-        if (!cerrado && generacion.get() == captura.generacion) {
+        // Incluso generaciones antiguas vuelven al hilo GL para liberar su ancla.
+        if (!cerrado) {
           resultados.add(ResultadoDeteccion(detecciones, captura.imagen.width, captura.imagen.height,
             error, captura.generacion, captura.geometria, captura.capturadoEn,
             SystemClock.elapsedRealtime() - inicio))
@@ -743,7 +818,7 @@ private class ArRenderer(
           continue
         }
         diagnosticoDetector = "Detector: ${resultado.detecciones.size} visibles · ${resultado.duracionMs} ms"
-        resultado.geometria.completarSuperficies(requireNotNull(session()), mapa)
+        resultado.geometria.completarSuperficies(requireNotNull(session()))
         val usadas = mutableSetOf<ArSpatialMap.Marca>()
         val noUbicadas = mutableListOf<ArDetection>()
         val rechazos = mutableMapOf<String, Int>()
@@ -755,7 +830,16 @@ private class ArRenderer(
           continue
         }
         for (deteccion in resultado.detecciones) {
+          // Una caja cortada cambia de centro al entrar en pantalla. Esperar
+          // el objeto completo evita fijar un fragmento como otra identidad.
+          if (deteccion.cx - deteccion.w / 2 <= 0.01f || deteccion.cy - deteccion.h / 2 <= 0.01f ||
+            deteccion.cx + deteccion.w / 2 >= 0.99f || deteccion.cy + deteccion.h / 2 >= 0.99f) {
+            rechazos["OBJETO_CORTADO"] = (rechazos["OBJETO_CORTADO"] ?: 0) + 1
+            avisar("Objeto cortado por el borde · encuádralo completo para contarlo")
+            continue
+          }
           val pose = resultado.geometria.resolver(deteccion.cx, deteccion.cy)
+          val desdeProfundidad = resultado.geometria.motivo == "PROFUNDIDAD"
           val camaraCaptura = resultado.geometria.poseCamaraActual()
           // Depth/hit-test actual sólo es válido si la cámara sigue en su sitio.
           val impacto = if (pose == null && camaraCaptura != null && camaraSuficientementeEstable(camaraCaptura, frame.camera.pose))
@@ -774,14 +858,20 @@ private class ArRenderer(
           val radio = if (bordeX != null && bordeY != null)
             (kotlin.math.sqrt(minOf(distanciaCuadrada(posicion, bordeX), distanciaCuadrada(posicion, bordeY))) * 1.5f).coerceIn(0.008f, 0.025f)
           else 0.018f
-          agregarAnclaSiEsNueva(
+          try { agregarAnclaSiEsNueva(
             posicion,
             "automática ${Math.round(deteccion.confianza * 100)}%",
             resultado.loteId,
             radio = radio,
+            profundidad = desdeProfundidad || (impacto?.trackable is DepthPoint),
+            camara = camaraCaptura,
             usadas = usadas,
             crearAncla = { impacto?.createAnchor() ?: requireNotNull(session()).createAnchor(posicion) },
-          )
+          ) } catch (_: NotTrackingException) {
+            ubicadas -= 1
+            noUbicadas.add(deteccion)
+            rechazos["ANCLA_NO_DISPONIBLE"] = (rechazos["ANCLA_NO_DISPONIBLE"] ?: 0) + 1
+          }
         }
         diagnosticoDetector += " · $ubicadas ubicados · ${candidatosPendientes.size} por confirmar"
         if (noUbicadas.isNotEmpty()) {
@@ -795,6 +885,7 @@ private class ArRenderer(
         ArDiagnostics.event("proyeccion", "frame" to resultado.loteId,
           "visibles" to resultado.detecciones.size, "ubicados" to ubicadas,
           "superficies" to resultado.geometria.numeroSuperficies,
+          "profundidad_capturada" to resultado.geometria.tieneProfundidad,
           "rechazos" to org.json.JSONObject(rechazos as Map<*, *>),
           "retenida" to retenida, "edad_ms" to ahora - resultado.capturadoEn,
           "detector_ms" to resultado.duracionMs, "candidatos" to candidatosPendientes.size,
@@ -828,12 +919,27 @@ private class ArRenderer(
 
   private fun agregarAnclaSiEsNueva(
     pose: Pose, origen: String, loteId: Long? = null, radio: Float = 0.018f,
+    profundidad: Boolean = false, camara: Pose? = null,
     usadas: MutableSet<ArSpatialMap.Marca> = mutableSetOf(), crearAncla: () -> Anchor,
   ) {
     synchronized(anclas) {
+      fun coincide(marca: ArSpatialMap.Marca): Boolean {
+        val r = maxOf(marca.radioAsociacion, radio)
+        if (distanciaCuadrada(marca.pose, pose) < r * r) return true
+        if ((!profundidad && !marca.usaProfundidad) || camara == null) return false
+        // La profundidad introduce sobre todo error a lo largo del rayo.
+        // No aumentar el radio lateral: fusionaría esferos vecinos.
+        val a = camara.inverse().compose(marca.pose).translation
+        val b = camara.inverse().compose(pose).translation
+        if (a[2] >= -0.1f || b[2] >= -0.1f || kotlin.math.abs(a[2] - b[2]) > 0.04f) return false
+        val escala = b[2] / a[2]
+        val dx = a[0] * escala - b[0]
+        val dy = a[1] * escala - b[1]
+        return dx * dx + dy * dy < r * r
+      }
       val duplicada = anclas.filter { it !in usadas && it.trackingState == TrackingState.TRACKING }
+        .filter { coincide(it) }
         .minByOrNull { distanciaCuadrada(it.pose, pose) }
-        ?.takeIf { distanciaCuadrada(it.pose, pose) < maxOf(it.radioAsociacion, radio).let { r -> r * r } }
       if (duplicada != null) {
         usadas.add(duplicada)
         candidatosPendientes.removeAll {
@@ -843,6 +949,9 @@ private class ArRenderer(
         ArDiagnostics.event("objeto_reconocido", "frame" to loteId, "total" to anclas.size)
         return
       }
+      // Una segunda caja compatible con una identidad ya usada es ambigua.
+      // Esperar otra vista en lugar de crear un segundo objeto encima.
+      if (usadas.any { coincide(it) }) return
       if (loteId != null) {
         val ahora = SystemClock.elapsedRealtime()
         candidatosPendientes.removeAll {
@@ -850,11 +959,15 @@ private class ArRenderer(
           caducado
         }
         val candidato = candidatosPendientes.filter {
-          it.ultimoLote != loteId && it.ancla.trackingState == TrackingState.TRACKING &&
-            distanciaCuadrada(it.ancla.pose, pose) < maxOf(it.ancla.radioAsociacion, radio).let { r -> r * r }
+          it.ultimoLote < loteId && it.ancla.trackingState == TrackingState.TRACKING && coincide(it.ancla)
         }.minByOrNull { distanciaCuadrada(it.ancla.pose, pose) }
         if (candidato == null) {
-          candidatosPendientes.add(CandidatoEspacial(mapa.ubicar(pose, crearAncla).also { it.radioAsociacion = radio }, 1, ahora, loteId))
+          // Un resultado antiguo reintentado no crea otro candidato encima.
+          if (candidatosPendientes.any { coincide(it.ancla) }) return
+          candidatosPendientes.add(CandidatoEspacial(mapa.ubicar(pose, crearAncla).also {
+            it.radioAsociacion = radio
+            it.usaProfundidad = profundidad
+          }, 1, ahora, loteId))
           ArDiagnostics.event("candidato_creado", "frame" to loteId, "radio_m" to radio,
             "candidatos" to candidatosPendientes.size)
           avisar("Objeto candidato · mantén el encuadre para confirmar")
@@ -865,7 +978,7 @@ private class ArRenderer(
           candidato.vistas += 1
           candidato.ultimoLote = loteId
         }
-        if (candidato.vistas < DETECCIONES_PARA_CONFIRMAR) return
+        if (candidato.vistas < (if (profundidad || candidato.ancla.usaProfundidad) 3 else DETECCIONES_PARA_CONFIRMAR)) return
         candidatosPendientes.remove(candidato)
         anclas.add(candidato.ancla)
         usadas.add(candidato.ancla)
@@ -978,6 +1091,19 @@ private class ArRenderer(
       GLES20.GL_POINTS, 1f, 0.7f, 0.15f)
     val confirmadas = synchronized(anclas) { anclas.filter { it.trackingState == TrackingState.TRACKING }.map { it.pose } }
     dibujar(proyectar(confirmadas), GLES20.GL_POINTS, 0.29f, 0.87f, 0.50f)
+    val ahora = SystemClock.elapsedRealtime()
+    if (ahora - ultimasEtiquetas >= 100L) {
+      ultimasEtiquetas = ahora
+      val marcas = synchronized(anclas) {
+        anclas.mapIndexedNotNull { index, marca ->
+          if (marca.trackingState != TrackingState.TRACKING) return@mapIndexedNotNull null
+          val xy = proyectar(listOf(marca.pose))
+          if (xy.size != 2 || xy[0] !in -1f..1f || xy[1] !in -1f..1f) null
+          else ArLabel(index + 1, (xy[0] + 1f) / 2f, (1f - xy[1]) / 2f)
+        }
+      }
+      onMarcas(marcas)
+    }
     GLES20.glDisable(GLES20.GL_BLEND)
   }
 
@@ -995,7 +1121,7 @@ private class ArRenderer(
       if (estadoMostrado != mensaje) mostradoDesde = ahora
       estadoMostrado = mensaje
     }
-    val detalle = "$diagnosticoDetector\nSeguimiento: ${if (ultimoTracking == TrackingState.TRACKING) "estable" else "en pausa ($motivoTracking)"} · Planos: $planosDisponibles\nPor ubicar: ${resultados.size} imágenes · En cola: ${capturasPendientes.size + if (inferenciaActiva.get()) 1 else 0}"
+    val detalle = "$diagnosticoDetector\nSeguimiento: ${if (ultimoTracking == TrackingState.TRACKING) "estable" else "en pausa ($motivoTracking)"} · Planos: $planosDisponibles · Profundidad: ${if (ultimaProfundidad) "sí" else "esperando"}\nPor ubicar: ${resultados.size} imágenes · En cola: ${capturasPendientes.size + if (inferenciaActiva.get()) 1 else 0}"
     if (detalle != ultimoDiagnostico && ahora - diagnosticoDesde >= 1000L) {
       ultimoDiagnostico = detalle
       diagnosticoDesde = ahora
@@ -1018,7 +1144,7 @@ private class ArRenderer(
     private const val TAG = "NativeArCore"
     private const val DETECCIONES_PARA_CONFIRMAR = 2
     private const val VIGENCIA_CANDIDATO_MS = 30_000L
-    private const val FRAMES_PARA_ANCLAR = 5
+    private const val FRAMES_PARA_ANCLAR = 2
     private const val INTERVALO_DETECCION_MS = 350L
     // El fallback de hit-test actual no puede desplazar centímetros un objeto
     // pequeño. El recorrido normal usa la geometría de la captura anclada.
@@ -1028,6 +1154,26 @@ private class ArRenderer(
     private const val FRAGMENT_CAMARA = "#extension GL_OES_EGL_image_external : require\nprecision mediump float; varying vec2 vUv; uniform samplerExternalOES uTexture; void main(){ gl_FragColor=texture2D(uTexture,vUv); }"
     private const val VERTEX_PUNTOS = "attribute vec2 aPos; void main(){ gl_Position=vec4(aPos,0.0,1.0); gl_PointSize=30.0; }"
     private const val FRAGMENT_PUNTOS = "precision mediump float; uniform vec4 uColor; uniform bool uEsPunto; void main(){ if(uEsPunto && length(gl_PointCoord-vec2(0.5))>0.5) discard; gl_FragColor=uColor; }"
+
+    private fun imagenAnotada(jpeg: ByteArray, detecciones: List<ArDetection>, rotacion: Int): Bitmap {
+      val original = requireNotNull(BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size))
+      val imagen = requireNotNull(original.copy(Bitmap.Config.ARGB_8888, true))
+      original.recycle()
+      val canvas = Canvas(imagen)
+      val pincel = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        style = Paint.Style.STROKE
+        strokeWidth = 3f
+      }
+      for (d in detecciones) canvas.drawRect(
+        (d.cx - d.w / 2) * imagen.width, (d.cy - d.h / 2) * imagen.height,
+        (d.cx + d.w / 2) * imagen.width, (d.cy + d.h / 2) * imagen.height, pincel)
+      if (rotacion == 0) return imagen
+      val girada = Bitmap.createBitmap(imagen, 0, 0, imagen.width, imagen.height,
+        Matrix().apply { postRotate(rotacion.toFloat()) }, true)
+      if (girada !== imagen) imagen.recycle()
+      return girada
+    }
 
     private fun buffer(valores: FloatArray): FloatBuffer = ByteBuffer
       .allocateDirect(valores.size * 4)
@@ -1101,3 +1247,27 @@ private data class CandidatoEspacial(
   var ultimoVisto: Long,
   var ultimoLote: Long,
 )
+
+private data class ArLabel(val id: Int, val x: Float, val y: Float)
+
+private class ArLabelsView(context: Context) : View(context) {
+  private var marcas: List<ArLabel> = emptyList()
+  private val densidad = resources.displayMetrics.density
+  private val pincel = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    textSize = 14f * densidad
+    isFakeBoldText = true
+    setShadowLayer(3f * densidad, 0f, 0f, Color.BLACK)
+  }
+
+  fun actualizar(nuevas: List<ArLabel>) {
+    marcas = nuevas
+    invalidate()
+  }
+
+  override fun onDraw(canvas: Canvas) {
+    super.onDraw(canvas)
+    pincel.color = Color.rgb(74, 222, 128)
+    for (marca in marcas) canvas.drawText("#${marca.id}",
+      marca.x * width + 12f * densidad, marca.y * height - 8f * densidad, pincel)
+  }
+}

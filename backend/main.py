@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO, YOLOWorld
 from routes.static_count import crear_router as crear_router_conteo_estatico
 from services.static_counter import StaticImageCounter
+from services.surface_scan import SurfaceScan
 from services.visual_reference import crear_perfil_visual, detectar_por_perfil, detectar_por_perfil_ar
 from deep_translator import GoogleTranslator
 import io
@@ -47,6 +48,30 @@ referencias_visuales: dict[str, dict] = {}
 traducciones_cache: dict[str, str] = {}
 MAX_REFERENCIAS_EN_MEMORIA = 30
 ORB = cv2.ORB_create(nfeatures=800)
+recorridos: dict[str, SurfaceScan] = {}
+recorridos_lock = Lock()
+
+
+@app.post('/scan/sessions')
+async def crear_recorrido(referencia_id: str = Query(...)):
+    if referencia_id not in referencias_visuales:
+        raise HTTPException(409, 'Selecciona de nuevo la referencia: el servidor no la conserva.')
+    with recorridos_lock:
+        for key in list(recorridos):
+            if time.monotonic() - recorridos[key].updated > 1800:
+                del recorridos[key]
+        if len(recorridos) >= 16:
+            raise HTTPException(503, 'Hay demasiados recorridos abiertos; espera y vuelve a intentar.')
+        key = str(uuid.uuid4())
+        recorridos[key] = SurfaceScan(referencia_id)
+    return {'sesion': key}
+
+
+@app.delete('/scan/sessions/{sesion}')
+async def cerrar_recorrido(sesion: str):
+    with recorridos_lock:
+        recorridos.pop(sesion, None)
+    return {'cerrado': True}
 
 # Google Translate traduce "esfero" como "sphere", pero en Colombia/Ecuador
 # normalmente significa bolígrafo. Aquí se conservan los términos que YOLO usa.
@@ -296,6 +321,8 @@ async def detect(
     modo: str = Query(default="tiempo_real"),
     rotacion: int = Query(default=0),
     ar_frame: int = Query(default=0, ge=0),
+    sesion: str = Query(default=''),
+    secuencia: int = Query(default=0, ge=0),
 ):
     t0 = time.time()
     print(f"\n📥 [/detect] Nuevo frame | Filtro: '{clase_filtro}'")
@@ -317,6 +344,14 @@ async def detect(
         image = image.transpose(Image.Transpose.ROTATE_90)
 
     img_w, img_h = image.size
+    recorrido = None
+    if modo == 'barrido':
+        with recorridos_lock:
+            recorrido = recorridos.get(sesion)
+        if recorrido is None or recorrido.reference != referencia_id or time.monotonic() - recorrido.updated > 1800:
+            raise HTTPException(409, 'El recorrido expiró. Conserva el total y comienza otro explícitamente.')
+        if rotacion != 0:
+            raise HTTPException(422, 'El barrido recibe imágenes orientadas, sin rotación adicional.')
     clase = normalizar(clase_filtro)
     _, candidatos = obtener_candidatos(clase)
     referencia_registro = referencias_visuales.get(referencia_id)
@@ -325,11 +360,11 @@ async def detect(
     perfil_apariencia = referencia_registro.get("perfil_apariencia") if referencia_registro else None
     if referencia_id and referencia is None:
         print("[REFERENCIA] ID no disponible; se usará sólo el filtro de YOLO.")
-        if modo == "ar_espacial":
+        if modo in ("ar_espacial", "barrido"):
             raise HTTPException(status_code=409, detail="La referencia AR expiró o el backend se reinició. Vuelve a seleccionar un ejemplar antes de continuar.")
     print(f"🎯 [/detect] Clases enviadas a YOLO: {candidatos}")
 
-    es_ar = modo == "ar_espacial"
+    es_ar = modo in ("ar_espacial", "barrido")
     detector_perfil = detectar_por_perfil_ar if es_ar else detectar_por_perfil
     candidatos_apariencia = await run_in_threadpool(detector_perfil, image, perfil_apariencia, candidatos[0]) if perfil_apariencia else []
     try:
@@ -422,6 +457,13 @@ async def detect(
     print(f"🔍 [/detect RESULTADO] Filtro: '{clase}' | Objetos: {len(objetos)} | Ruta: {ruta} | Tiempo: {duracion}s")
 
     respuesta = {"objetos": objetos}
+    if recorrido is not None:
+        try:
+            respuesta = await run_in_threadpool(recorrido.process, image, objetos, secuencia)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from error
+        print('[BARRIDO] ' + json.dumps({k: v for k, v in respuesta.items() if k != 'objetos'}), flush=True)
+        return respuesta
     if es_ar:
         respuesta["diagnostico"] = {
             "frame": ar_frame,

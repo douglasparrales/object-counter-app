@@ -1,3 +1,4 @@
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMemo } from 'react';
 import { PanResponder, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -10,15 +11,18 @@ export default function AboutScreen() {
     onPanResponderRelease: (_, gesto) => { if (gesto.dx < -80) router.push('/history'); },
   }), [router]);
   return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#10151c' }}>
     <View style={styles.container} {...gestoHistorial.panHandlers}>
-      <View style={styles.menu}><AppMenu /></View>
-      <TouchableOpacity onPress={() => router.back()} style={styles.topBack}><Text style={styles.topBackText}>‹</Text></TouchableOpacity>
+      <View style={[styles.menu, { top: 8 }]}><AppMenu /></View>
+      <TouchableOpacity onPress={() => router.back()} style={[styles.topBack, { top: 10 }]}><Text style={styles.topBackText}>‹</Text></TouchableOpacity>
       <View style={styles.content}>
         <Text style={styles.title}>Object Counter</Text>
-        <Text style={styles.text}>Aplicación de conteo visual de objetos mediante cámara e inteligencia artificial.</Text>
+        <Text style={styles.text}>Cuenta objetos en una foto o recorre una superficie con la cámara. Revisa tus resultados y guárdalos con su ubicación.</Text>
+        <Text style={styles.text}>Para contar con la cámara, mantén los objetos quietos y avanza despacio sobre una superficie con detalles visibles.</Text>
         <Text style={styles.version}>Versión 1.0.0</Text>
       </View>
     </View>
+    </SafeAreaView>
   );
 }
 

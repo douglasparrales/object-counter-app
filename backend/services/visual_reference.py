@@ -14,7 +14,20 @@ def crear_perfil_visual(image: Image.Image, caja: tuple[float, float, float, flo
         saturados = pixeles
     centro = np.median(saturados, axis=0)
     ancho, alto = max(1, x2 - x1), max(1, y2 - y1)
+    # La caja de un bolígrafo diagonal es casi cuadrada. Medir su componente
+    # orientada evita compararla después con el aspecto real (largo/delgado).
+    tono = np.abs(referencia[:, :, 0].astype(np.float32) - centro[0])
+    tono = np.minimum(tono, 180 - tono)
+    mascara = ((tono <= 22) & (referencia[:, :, 1] >= max(45, centro[1] - 80)) &
+               (np.abs(referencia[:, :, 2].astype(np.float32)-centro[2]) <= 100)).astype(np.uint8)*255
+    contornos, _ = cv2.findContours(mascara, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    aspecto_ar = max(ancho / alto, alto / ancho)
+    if contornos:
+        lados = sorted(cv2.minAreaRect(max(contornos, key=cv2.contourArea))[1])
+        if lados[0] >= 2:
+            aspecto_ar = lados[1] / lados[0]
     return {
+        "aspecto_ar": aspecto_ar,
         "centro_hsv": centro,
         "tolerancia_h": max(8, min(22, round(float(np.std(saturados[:, 0]) * 1.8)))),
         "tolerancia_s": max(45, min(100, round(float(np.std(saturados[:, 1]) * 2.2)))),
@@ -91,10 +104,17 @@ def detectar_por_perfil_ar(image: Image.Image, perfil: dict, etiqueta: str):
         if menor < 1 or mayor < 8:
             continue
         aspecto = mayor / menor
-        if not max(1, perfil["aspecto"] * 0.30) <= aspecto <= perfil["aspecto"] * 3.2:
+        aspecto_referencia = perfil.get("aspecto_ar", perfil["aspecto"])
+        if not max(1, aspecto_referencia * 0.30) <= aspecto <= aspecto_referencia * 3.2:
             continue
         x, y, w, h = cv2.boundingRect(contorno)
         if w * h > image.width * image.height * 0.65:
+            continue
+        # El filtro AR había perdido el límite relativo usado por el modo 2D:
+        # un trazo azul diminuto podía convertirse en otro esfero. Admitimos
+        # hasta 25 veces menos área que la referencia para tolerar alejarse.
+        area_referencia = perfil["area_relativa"] * image.width * image.height
+        if w * h < max(24, 0.04 * area_referencia):
             continue
         relleno = area / max(1, lado_a * lado_b)
         if relleno < 0.25:

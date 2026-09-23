@@ -101,7 +101,7 @@ function withFuentes(config) {
       'app', 'src', 'main', 'java', ...paquete.split('.'),
     );
     fs.mkdirSync(destino, { recursive: true });
-    for (const archivo of ['ArDiagnostics.kt', 'ArCameraGate.kt', 'ArCaptureGeometry.kt', 'ArSpatialMap.kt', 'ArDetectionClient.kt', 'NativeArCoreActivity.kt', 'NativeArCoreModule.kt', 'NativeArCorePackage.kt']) {
+    for (const archivo of ['ArDepthSnapshot.kt', 'ArDiagnostics.kt', 'ArCameraGate.kt', 'ArCaptureGeometry.kt', 'ArSpatialMap.kt', 'ArDetectionClient.kt', 'NativeArCoreActivity.kt', 'NativeArCoreModule.kt', 'NativeArCorePackage.kt']) {
       fs.copyFileSync(path.join(origen, archivo), path.join(destino, archivo));
     }
     return modConfig;

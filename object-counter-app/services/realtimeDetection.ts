@@ -23,6 +23,35 @@ export interface ProveedorDeteccionTiempoReal {
   detectar(uri: string, claseFiltro: string, referenciaId: string | null): Promise<DeteccionTiempoReal[]>;
 }
 
+export type ResultadoBarrido = {
+  total: number;
+  estado: 'INICIANDO' | 'SIGUIENDO' | 'SIN_COINCIDENCIA';
+  coincidencias: number;
+  objetos: (DeteccionTiempoReal & { id: number; confirmado: boolean })[];
+};
+
+export async function crearBarrido(referenciaId: string) {
+  const response = await fetchConTimeout(`${BACKEND_URL}/scan/sessions?referencia_id=${encodeURIComponent(referenciaId)}`, { method: 'POST' });
+  if (!response.ok) throw new Error('No se pudo iniciar el barrido. Revisa el backend y vuelve a seleccionar la referencia.');
+  return (await response.json()).sesion as string;
+}
+
+export async function cerrarBarrido(sesion: string) {
+  await fetchConTimeout(`${BACKEND_URL}/scan/sessions/${encodeURIComponent(sesion)}`, { method: 'DELETE' }).catch(() => {});
+}
+
+export async function detectarBarrido(uri: string, clase: string, referencia: string, sesion: string, secuencia: number): Promise<ResultadoBarrido> {
+  const body = new FormData();
+  body.append('file', { uri, type: 'image/jpeg', name: 'barrido.jpg' } as any);
+  const query = new URLSearchParams({ modo: 'barrido', clase_filtro: clase, referencia_id: referencia, sesion, secuencia: String(secuencia) });
+  const response = await fetchConTimeout(`${BACKEND_URL}/detect?${query}`, { method: 'POST', body });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Error del barrido (${response.status})`);
+  }
+  return response.json();
+}
+
 async function fetchConTimeout(url: string, options: RequestInit, timeoutMs = 20_000) {
   const controlador = new AbortController();
   const timeout = setTimeout(() => controlador.abort(), timeoutMs);

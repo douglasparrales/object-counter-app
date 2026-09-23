@@ -32,8 +32,8 @@ export async function comprobarCompatibilidadArCore(): Promise<CompatibilidadArC
     await new Promise<void>((resolve) => setTimeout(resolve, 500));
     resultado = await modulo.comprobarCompatibilidad();
   }
-  if (resultado.compatible && resultado.versionNativa !== '2026.09.15.2') {
-    throw new Error('El módulo AR instalado está desactualizado. Compila e instala Android nuevamente; recargar Metro no actualiza AR. Se necesita AR 2026.09.15.2.');
+  if (resultado.compatible && resultado.versionNativa !== '2026.09.22.2') {
+    throw new Error('El módulo AR instalado está desactualizado. Compila e instala Android nuevamente; recargar Metro no actualiza AR. Se necesita AR 2026.09.22.2.');
   }
   return resultado;
 }
