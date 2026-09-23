@@ -1,0 +1,9 @@
+node_modules/
+android/
+ios/
+.expo/
+*.pt
+*.onnx
+Ultralytics/
+yolov8n_saved_model/
+yolovenv/

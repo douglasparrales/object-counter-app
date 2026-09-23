@@ -1,4 +1,4 @@
-import { BACKEND_URL } from '../config/backend';
+import { getBackendUrl } from '../config/backend';
 import type { SeleccionReferencia } from '../components/ReferenceSelector';
 
 export type DeteccionTiempoReal = {
@@ -30,21 +30,31 @@ export type ResultadoBarrido = {
   objetos: (DeteccionTiempoReal & { id: number; confirmado: boolean })[];
 };
 
+const servidoresSesion = new Map<string, string>();
+
 export async function crearBarrido(referenciaId: string) {
-  const response = await fetchConTimeout(`${BACKEND_URL}/scan/sessions?referencia_id=${encodeURIComponent(referenciaId)}`, { method: 'POST' });
+  const baseUrl = await getBackendUrl();
+  if (!baseUrl) throw new Error('Configura primero la dirección del servidor.');
+  const response = await fetchConTimeout(`${baseUrl}/scan/sessions?referencia_id=${encodeURIComponent(referenciaId)}`, { method: 'POST' });
   if (!response.ok) throw new Error('No se pudo iniciar el barrido. Revisa el backend y vuelve a seleccionar la referencia.');
-  return (await response.json()).sesion as string;
+  const sesion = (await response.json()).sesion as string;
+  servidoresSesion.set(sesion, baseUrl);
+  return sesion;
 }
 
 export async function cerrarBarrido(sesion: string) {
-  await fetchConTimeout(`${BACKEND_URL}/scan/sessions/${encodeURIComponent(sesion)}`, { method: 'DELETE' }).catch(() => {});
+  const baseUrl = servidoresSesion.get(sesion);
+  servidoresSesion.delete(sesion);
+  if (baseUrl) await fetchConTimeout(`${baseUrl}/scan/sessions/${encodeURIComponent(sesion)}`, { method: 'DELETE' }).catch(() => {});
 }
 
 export async function detectarBarrido(uri: string, clase: string, referencia: string, sesion: string, secuencia: number): Promise<ResultadoBarrido> {
+  const baseUrl = servidoresSesion.get(sesion);
+  if (!baseUrl) throw new Error('El conteo ya no está activo. Inicia otro conteo.');
   const body = new FormData();
   body.append('file', { uri, type: 'image/jpeg', name: 'barrido.jpg' } as any);
   const query = new URLSearchParams({ modo: 'barrido', clase_filtro: clase, referencia_id: referencia, sesion, secuencia: String(secuencia) });
-  const response = await fetchConTimeout(`${BACKEND_URL}/detect?${query}`, { method: 'POST', body });
+  const response = await fetchConTimeout(`${baseUrl}/detect?${query}`, { method: 'POST', body });
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     throw new Error(error.detail || `Error del barrido (${response.status})`);
@@ -69,7 +79,9 @@ export const proveedorBackend: ProveedorDeteccionTiempoReal = {
     const parametros = new URLSearchParams({ modo: 'tiempo_real' });
     if (claseFiltro) parametros.set('clase_filtro', claseFiltro);
     if (referenciaId) parametros.set('referencia_id', referenciaId);
-    const url = `${BACKEND_URL}/detect?${parametros.toString()}`;
+    const baseUrl = await getBackendUrl();
+    if (!baseUrl) throw new Error('Configura primero la dirección del backend.');
+    const url = `${baseUrl}/detect?${parametros.toString()}`;
     const response = await fetchConTimeout(url, { method: 'POST', body: formData });
     if (!response.ok) throw new Error(`Error ${response.status}`);
     const data = await response.json();
@@ -91,7 +103,9 @@ export async function identificarReferencia(
     seleccion_w: String(seleccion.w),
     seleccion_h: String(seleccion.h),
   });
-  const url = `${BACKEND_URL}/identify?${parametros.toString()}`;
+  const baseUrl = await getBackendUrl();
+  if (!baseUrl) throw new Error('Configura primero la dirección del backend.');
+  const url = `${baseUrl}/identify?${parametros.toString()}`;
   const response = await fetchConTimeout(url, { method: 'POST', body: formData }, 60_000);
   if (!response.ok) throw new Error(`Error ${response.status}`);
   const data = await response.json();

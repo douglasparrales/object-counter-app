@@ -1,15 +1,15 @@
 # Object Counter App
 
-Aplicación móvil Android construida con Expo SDK 55 y React Native. Permite contar objetos desde una fotografía y realizar conteo en tiempo real con estabilización temporal. El backend usa FastAPI, YOLO y YOLO-World.
+Aplicación móvil Android construida con Expo SDK 55 y React Native. Permite contar objetos desde una fotografía y contar objetos durante un recorrido con memoria de posiciones. El backend usa FastAPI, YOLO y YOLO-World.
 
 La rama `main` contiene la versión estable. El experimento de conteo espacial con ARCore nativo se desarrolla de forma aislada en `feature/arcore-native-counting` y todavía no forma parte del producto estable.
 
 ## Estado y alcance actual
 
-- **Conteo desde foto:** se toma una fotografía, se escribe el nombre del objeto y se dibuja un rectángulo alrededor de un ejemplar. El resultado puede corregirse antes de guardarlo.
-- **Conteo en tiempo real (estable):** se valida un ejemplar y se analizan imágenes periódicas. El total usa consenso temporal para evitar que cambios momentáneos o IDs inestables produzcan duplicados. Las cajas son una ayuda visual y no determinan el total.
-- **ARCore nativo (en desarrollo):** la rama `feature/arcore-native-counting` reemplaza el prototipo Viro por una Activity Android nativa. El escaneo envía fotogramas AR al detector, proyecta cada caja aceptada sobre una superficie 3D y conserva un ancla aunque el objeto salga del encuadre. Las detecciones que reaparecen cerca de un ancla existente no vuelven a sumar.
-- **Reportes:** se guardan localmente en SQLite sólo cuando el usuario confirma el guardado.
+- **Contar en una foto:** selección de referencia, detección y corrección manual antes de guardar.
+- **Contar con la cámara:** registra superficies aproximadamente planas con detalles visuales y asigna posiciones e IDs persistentes a objetos inmóviles. Conserva el total fuera del encuadre y pausa incorporaciones cuando pierde la referencia visual.
+- **ARCore nativo:** permanece en el código como experimento, con acceso oculto. El conteo principal usa VisionCamera y el mapa de superficie del backend.
+- **Reportes:** guardado explícito en SQLite. La conexión al servidor se configura desde el menú y se conserva entre reinicios.
 
 ## Estructura del repositorio
 
@@ -36,9 +36,9 @@ Los pesos de YOLO (`*.pt`), los entornos virtuales, `node_modules/` y las carpet
 - JDK 17. Puede usarse el JDK incluido con Android Studio.
 - Variables de Android configuradas (`ANDROID_HOME` o `ANDROID_SDK_ROOT`) y `platform-tools` disponible en `PATH`.
 - Un dispositivo Android físico con opciones de desarrollador y depuración USB habilitadas.
-- Para **Contar AR**, un dispositivo compatible con ARCore y Google Play Services for AR instalado/actualizado.
+- Para investigar el módulo AR nativo, un dispositivo compatible con ARCore y Google Play Services for AR instalado/actualizado.
 
-La aplicación contiene módulos nativos, por lo que debe construirse con `expo run:android`. No se debe usar Expo Go y se recomienda un dispositivo físico. `main` conserva dependencias Viro/ONNX/TFLite del prototipo anterior aunque ya no expone ese modo en la pantalla; retirarlas es una limpieza técnica pendiente y no se necesita generar un modelo ONNX para usar las funciones estables.
+La aplicación contiene módulos nativos, por lo que debe construirse con `expo run:android`. No se debe usar Expo Go y se recomienda un dispositivo físico. La integración usa el módulo ARCore nativo existente, sin reintroducir Viro. No se necesita generar un modelo ONNX para contar.
 
 ## Instalación en una máquina limpia
 
@@ -101,17 +101,16 @@ En Windows, consulta la IPv4 del adaptador Wi-Fi o Ethernet activo:
 ipconfig
 ```
 
-Dentro de `object-counter-app/`, crea un archivo `.env`:
+En la app abre el menú, entra a la configuración del backend y escribe esa IPv4, por ejemplo `192.168.1.3`. La app agrega automáticamente `http://` y el puerto `8000`, guarda la dirección en el teléfono y la reutiliza en los siguientes inicios. También puedes escribir una URL completa con otro puerto.
 
-```env
-EXPO_PUBLIC_BACKEND_URL=http://192.168.1.3:8000
-```
+Después de iniciar el backend, usa **Probar conexión** en la app. No es necesario volver a generar la APK cuando cambia la IP.
 
-Sustituye `192.168.1.3` por la IPv4 real del computador y no añadas `/` al final.
+Opcionalmente, `EXPO_PUBLIC_BACKEND_URL` permite definir una dirección inicial durante el build, pero la dirección guardada desde la app siempre tiene prioridad.
 
-La aplicación lee esta variable desde `object-counter-app/config/backend.ts`. Las variables `EXPO_PUBLIC_*` se incorporan al bundle: si cambia la IP, detén Metro y vuelve a iniciar o reconstruir la aplicación.
+La dirección guardada en el teléfono tiene prioridad sobre la variable de entorno. Cada sesión de conteo conserva el servidor con el que empezó.
 
-Existe una IP predeterminada de desarrollo en el código, pero no debe suponerse válida en otra máquina; configura siempre `.env`.
+Existe una IP predeterminada de desarrollo en el código, pero no debe suponerse válida en otra máquina; revisa la dirección en **Conexión al servidor**.
+
 
 ### 4. Instalar las dependencias de la app
 
@@ -213,47 +212,26 @@ La carpeta `android/` es generada y está ignorada por Git. El plugin configura 
 6. Revisa las detecciones. Puedes eliminar una caja incorrecta o añadir manualmente un objeto omitido.
 7. Continúa y guarda el reporte sólo si deseas conservarlo.
 
-### Conteo en tiempo real
+### Contar con la cámara
 
-1. Entra a **Conteo en tiempo real** y pulsa **Qué contar**.
-2. Toma una foto de referencia, escribe el nombre y selecciona el ejemplar.
-3. La app envía la referencia a `POST /identify` para validarla.
-4. Pulsa **Contar** y mueve la cámara lentamente. El consenso temporal conserva el total estable ante pérdidas breves de detección.
-5. Detén el conteo, revisa el total y guarda opcionalmente el reporte.
+1. Entra a **Contar con la cámara** y captura una referencia.
+2. Escribe el nombre, selecciona un ejemplar y confirma la referencia.
+3. Pulsa **Contar**. Mantén objetos quietos sobre una superficie aproximadamente plana con detalles.
+4. Avanza lentamente con vistas solapadas. Verde indica un objeto confirmado; amarillo, una detección pendiente.
+5. Los objetos confirmados permanecen en el total fuera del encuadre. Si se pierde la referencia visual, vuelve a una zona conocida.
+6. Pulsa **Finalizar**, después **Guardar** si deseas conservar el reporte. El botón Guardar tiene una pulsación sutil; Listo no tiene animación propia.
 
-### Escaneo AR espacial
+La captura siguiente empieza después de procesar la anterior y una espera de 400 ms. Esto no equivale a una frecuencia garantizada: depende del dispositivo, la red y la inferencia.
 
-Disponible únicamente al cambiar a `feature/arcore-native-counting`.
+El mapa vive durante la sesión del backend. Reiniciar el servidor pierde ese mapa. Ningún objeto que nunca haya aparecido en una captura puede contarse. Para superficies lisas, objetos móviles o distintas profundidades no se garantiza precisión.
 
-1. Configura una referencia igual que en tiempo real.
-2. Pulsa **Escanear en AR**. Confirmar la referencia no abre la cámara 2D: ésta sólo se abre al elegir **Contar**. AR desmonta las vistas VisionCamera y espera la disponibilidad física de la cámara en Android.
-3. Mueve la cámara lentamente para que ARCore reconozca la mesa. El contorno azul muestra una superficie medida; los puntos amarillos son candidatos y los verdes son objetos confirmados.
-4. Recorre la superficie lentamente, dejando cada objeto visible alrededor de un segundo y solapando las vistas. El diagnóstico separado muestra detecciones, posiciones resueltas y capturas pendientes.
-5. Cada detección válida queda fijada a una posición 3D. Puede salir del encuadre sin desaparecer del total y no se suma otra vez al volver a verla desde otro ángulo.
-6. Si el detector omite un objeto, toca su base para añadirlo manualmente. **Reiniciar** elimina todas las anclas de la sesión.
-7. Pulsa **Finalizar**, revisa el total y guarda opcionalmente el reporte como **Escaneo AR**.
-
-El teléfono y el backend deben estar en la misma red también durante el escaneo AR. Se capturan imágenes cada 350 ms como máximo, con una cola limitada de seis imágenes, sin esperar a que termine cada petición. Cada captura conserva intrínsecos y geometría referida al mapa compartido. La respuesta se proyecta desde la cámara de esa captura, incluso si el teléfono se movió durante la inferencia. El fallback de profundidad sobre el frame actual sólo se admite si la cámara permanece prácticamente inmóvil. Dos observaciones independientes confirman cada objeto.
-
-Una pausa breve conserva candidatos y respuestas pendientes; se aplican al recuperar el seguimiento. Reiniciar sí invalida toda la evidencia y vacía el mapa. Si las referencias confirmadas dejan de seguirse, se suspenden nuevas altas hasta recuperar el mapa. Una pérdida definitiva exige guardar sólo lo confirmado o reiniciar el conteo. Las referencias persisten mientras la Activity AR permanece abierta, no después de cerrar la sesión ni de reiniciar la aplicación.
-
-Si no se detecta superficie tras 15 segundos, se muestra orientación y la opción de volver al selector 2D. Tras 30 segundos continuos sin tracking, la sesión se pausa y ofrece reintento explícito. Si Android no libera la cámara en 6 segundos, aparece un error de adquisición; un fallo transitorio de `Session.resume()` tiene hasta tres intentos. **Reintentar AR** vuelve a adquirir la cámara sin borrar el total confirmado.
-
-`system/camera-is-restricted` corresponde a `ERROR_CAMERA_DISABLED` de CameraX; no es el mismo error que cámara ocupada. Revisa el permiso de cámara, el interruptor global **Acceso a la cámara** y las restricciones del administrador si el teléfono está administrado. Una política que deshabilita la cámara no se puede resolver cambiando a video. La app muestra el problema y detiene la captura en lugar de reabrirla en bucle.
-
-Los cambios incluyen Kotlin y requieren recompilar Android; recargar Metro no actualiza el código nativo. La vista y el bridge identifican la revisión `AR 2026.09.15.2`. Las fuentes autoritativas están en `object-counter-app/plugins/native-arcore/` y se sincronizan en prebuild y antes de compilar. No es necesario desinstalar ni borrar los datos. El botón Finalizar espera las capturas pendientes y avisa si quedan candidatos o partes del recorrido sin analizar. Metro muestra `[AR diagnóstico]` y el backend `[AR_DETECT]`, relacionados por `frame`. Investigación, límites y caso de aceptación: [docs/ar-counting.md](docs/ar-counting.md).
-
-“Fuera del rango de la cámara” significa que el objeto puede dejar de verse después de haber sido escaneado al menos una vez. Ningún modo basado sólo en la cámara puede contar un objeto que nunca apareció en una imagen; para ese caso harían falta sensores o fuentes externas al teléfono.
-
-La prioridad de esta rama es el escaneo AR en tiempo real. Procesar un video grabado se deja como un modo posterior: un tracker 2D sobre video no basta para garantizar que un objeto que sale y reaparece sea el mismo. Para ofrecer esa garantía, el video necesitará reconstrucción de cámara/SLAM y asociación 3D equivalentes a las anclas de esta sesión.
-
-Desliza la pantalla de cámara hacia la izquierda o usa el menú lateral para consultar los reportes guardados.
+Detalles técnicos e historial de AR: [docs/ar-counting.md](docs/ar-counting.md).
 
 ## Red e Internet
 
 - El teléfono debe poder alcanzar el puerto `8000` del computador.
 - Algunas redes empresariales, universitarias o de invitados aíslan los dispositivos aunque estén en el mismo Wi-Fi.
-- Si la IP cambia por DHCP, actualiza `EXPO_PUBLIC_BACKEND_URL` y reinicia/reconstruye la app.
+- Si la IP cambia por DHCP, actualízala desde la configuración de la app; no hace falta reconstruir la APK.
 - La traducción de nombres no incluidos en los alias locales usa `deep-translator` y puede necesitar Internet durante el uso. Los términos en inglés reducen esa dependencia.
 
 ## Solución de problemas
@@ -261,7 +239,7 @@ Desliza la pantalla de cámara hacia la izquierda o usa el menú lateral para co
 ### La app no conecta con el backend
 
 - Confirma que Uvicorn esté iniciado con `--host 0.0.0.0`.
-- Comprueba que la IP de `.env` sea la del adaptador activo.
+- Comprueba que la IP guardada en la configuración sea la del adaptador activo y usa **Probar conexión**.
 - Abre `http://IP_DEL_COMPUTADOR:8000/docs` desde el navegador del teléfono.
 - Revisa el firewall y confirma que la red no aísle los dispositivos.
 - Después de modificar `.env`, reinicia Metro o reconstruye la app.
@@ -293,6 +271,8 @@ Desinstala el development build anterior y ejecuta nuevamente `npx expo run:andr
 - El escaneo AR automático requiere superficies o profundidad válidas. Objetos suspendidos, reflectantes, transparentes o demasiado juntos pueden necesitar corrección manual.
 - El inventario debe permanecer quieto durante una sesión. Si un objeto contado cambia físicamente de lugar, su ancla anterior no se mueve con él y una detección en la nueva posición podría sumarlo otra vez.
 - Los objetos y capturas cercanos comparten anclas regionales (hasta 1,5 m del origen de cada región), evitando anclas independientes para cada detección. La precisión con objetos muy juntos y recorridos extensos necesita validación física.
+- El modo estable reduce duplicados mediante consenso temporal, pero no reconstruye el espacio físico. La garantía espacial fuera del encuadre es el objetivo de la rama ARCore nativa.
+
 
 ## Desarrollo por ramas
 

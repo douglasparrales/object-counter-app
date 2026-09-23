@@ -1,5 +1,5 @@
 import { DeviceEventEmitter, NativeModules, Platform } from 'react-native';
-import { BACKEND_URL } from '../config/backend';
+import { getBackendUrl } from '../config/backend';
 
 export type CompatibilidadArCore = {
   estado: string;
@@ -50,7 +50,7 @@ export async function abrirConteoArCore(
     console.log('[AR diagnóstico]', mensaje);
   });
   try {
-    return await modulo.abrirConteo(nombre, clase, referenciaId, BACKEND_URL);
+    return await modulo.abrirConteo(nombre, clase, referenciaId, await getBackendUrl());
   } finally {
     diagnosticos.remove();
   }

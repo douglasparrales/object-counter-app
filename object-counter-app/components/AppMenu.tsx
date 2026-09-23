@@ -2,30 +2,41 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRef, useState } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { SettingsModal } from './SettingsModal';
 
 export default function AppMenu() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [visible, setVisible] = useState(false);
+  const [settingsVisible, setSettingsVisible] = useState(false);
   const progreso = useRef(new Animated.Value(0)).current;
 
   const abrir = () => {
     setVisible(true);
     Animated.timing(progreso, { toValue: 1, duration: 220, useNativeDriver: true }).start();
   };
+
   const cerrar = (accion?: () => void) => {
     Animated.timing(progreso, { toValue: 0, duration: 180, useNativeDriver: true }).start(() => {
       setVisible(false);
       accion?.();
     });
   };
+
   const mover = (ruta: '/history' | '/about' | '/') => cerrar(() => router.push(ruta));
+
+  const abrirConfiguracion = () => {
+    cerrar(() => setSettingsVisible(true));
+  };
 
   return (
     <>
       <TouchableOpacity style={styles.trigger} onPress={abrir} accessibilityLabel="Abrir menú">
-        <View style={styles.line} /><View style={styles.line} /><View style={styles.line} />
+        <View style={styles.line} />
+        <View style={styles.line} />
+        <View style={styles.line} />
       </TouchableOpacity>
+
       <Modal visible={visible} transparent animationType="none" onRequestClose={() => cerrar()}>
         <View style={styles.overlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => cerrar()} />
@@ -36,9 +47,17 @@ export default function AppMenu() {
             <TouchableOpacity style={styles.item} onPress={() => mover('/about')}><Text style={styles.itemText}>Acerca de</Text></TouchableOpacity>
             <TouchableOpacity style={styles.item} onPress={() => mover('/')}><Text style={styles.itemText}>Inicio</Text></TouchableOpacity>
             <Text style={[styles.version, { bottom: insets.bottom + 16 }]}>Versión 1.0.0</Text>
+            <TouchableOpacity style={styles.item} onPress={abrirConfiguracion}><Text style={styles.itemText}>Conexión al servidor</Text></TouchableOpacity>
+
           </Animated.View>
         </View>
       </Modal>
+
+      {/* Modal de Configuración de IP */}
+      <SettingsModal
+        visible={settingsVisible}
+        onClose={() => setSettingsVisible(false)}
+      />
     </>
   );
 }
