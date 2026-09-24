@@ -276,3 +276,15 @@ SQLite almacena las sesiones guardadas, resultados y eventos de auditoría. Las 
 ## Para pasar a producción
 
 La app necesita validar precisión con equipos reales y distintas condiciones, mejorar el seguimiento entre profundidades, desplegar un backend seguro y estable, definir respaldo y privacidad de los datos y completar pruebas de rendimiento, recuperación de errores y distribución firmada.
+
+## Alcance de las tres ramas
+
+Estado verificado en GitHub el 24 de septiembre de 2026:
+
+| Rama | Hasta dónde llega |
+| --- | --- |
+| `main` | Versión integrada actual: conteo por foto y por recorrido con memoria de IDs, reportes, configuración de conexión, interfaz unificada y limpieza del repositorio. Probada físicamente con esferos; equipos informáticos pendientes de validación real. |
+| `feature/arcore-native-counting` | En GitHub permanece en `02fa286`: avances experimentales de ARCore nativo, anteriores a las correcciones finales del recorrido y la interfaz. No es la versión más reciente para ejecutar la app. |
+| `respaldo/main-antes-conteo-20260924` | Copia de main en `5150321`, anterior a la integración: conteo por foto y conteo de objetos visibles, reportes y configuración de IP; sin la nueva memoria del recorrido fuera del encuadre. |
+
+La rama local `feature/arcore-native-counting` llegó hasta `291568a` y ese trabajo ya se integró en `main`; su copia remota no se actualizó. Para continuar con la versión actual, utiliza `main`.
