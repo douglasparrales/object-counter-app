@@ -1,5 +1,13 @@
 # Integración de main con conteo persistente
 
+## Cierre de la fase, 24 de septiembre
+
+El usuario autorizó completar la integración con la validación física disponible de esferos, posponiendo la prueba con equipos informáticos porque no dispone de ellos actualmente. La ruta de detección de equipos está implementada, pero no se afirma precisión validada con monitores, mouses o teclados reales ni con recorridos entre distintas profundidades.
+
+Se verificó en el Samsung el guardado de cuatro esferos: reporte 7, ubicación `Validacion esferos 24-09`, imagen persistida y una única entrada `REPORTE_GUARDADO` con total cuatro. El reporte aparece en el historial y la confirmación muestra `Reporte guardado` y `Listo`. La animación de Guardar y el botón Listo conservan la implementación revisada.
+
+Integración local mediante avance directo de main, conservando su historial y las funciones recuperadas en `876df56`. Respaldo previo: `codex/main-before-counting-20260924`, apuntando a `5150321`. Sin publicación remota. Las notas posteriores conservan el historial de fallos y sus correcciones; sus pendientes históricos no sustituyen este estado de cierre.
+
 ## Puntos de recuperación
 
 - `main` de partida: `5150321`.
