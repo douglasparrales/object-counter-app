@@ -1,4 +1,6 @@
 node_modules/
+log.txt
+capturas_sprints/
 android/
 ios/
 .expo/

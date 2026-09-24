@@ -2,7 +2,7 @@
 
 Aplicación móvil Android construida con Expo SDK 55 y React Native. Permite contar objetos desde una fotografía y contar objetos durante un recorrido con memoria de posiciones. El backend usa FastAPI, YOLO y YOLO-World.
 
-La rama `main` contiene la versión estable. El experimento de conteo espacial con ARCore nativo se desarrolla de forma aislada en `feature/arcore-native-counting` y todavía no forma parte del producto estable.
+La rama `main` integra el conteo por foto y por recorrido. El módulo ARCore nativo permanece experimental y oculto; no es el motor del conteo principal. La validación física disponible corresponde a esferos; falta evaluar la precisión con equipos informáticos reales.
 
 ## Estado y alcance actual
 
@@ -14,11 +14,13 @@ La rama `main` contiene la versión estable. El experimento de conteo espacial c
 ## Estructura del repositorio
 
 ```text
-backend/             API FastAPI, detección y scripts de exportación
+backend/             API FastAPI, detección y seguimiento
 object-counter-app/  aplicación Expo/React Native
 ```
 
 Los pesos de YOLO (`*.pt`), los entornos virtuales, `node_modules/` y las carpetas nativas generadas no se versionan. En una máquina limpia deben descargarse o generarse siguiendo esta guía.
+
+Para recoger errores y entender los registros, consulta [la guía de diagnóstico](docs/diagnostico.md). La carpeta local `analysis/` contiene material temporal de pruebas, no es necesaria para ejecutar la app y está excluida de Git.
 
 ## Requisitos
 

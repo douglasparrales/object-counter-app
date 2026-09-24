@@ -412,7 +412,7 @@ export default function CameraScreen() {
 
       <View style={styles.controls} pointerEvents={preparandoAr ? 'none' : 'auto'}>
         <TouchableOpacity style={styles.navBtn} onPress={() => router.back()}>
-          <Text style={styles.navBackText}>‹</Text>
+          <View style={styles.backIcon} pointerEvents="none"><View style={styles.backChevron} /></View>
         </TouchableOpacity>
         <TouchableOpacity disabled={isDetecting} style={[styles.navBtn, isDetecting && styles.disabledBtn]} onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}>
           <Text style={styles.flipText}>Girar</Text>
@@ -471,7 +471,7 @@ export default function CameraScreen() {
               <Text style={styles.modalHint}>Encuadra el objeto que quieres contar</Text>
               <View style={styles.modalControls}>
                 <TouchableOpacity style={styles.navBtn} onPress={cerrarModalReferencia}>
-                  <Text style={styles.navBackText}>‹</Text>
+                  <View style={styles.backIcon} pointerEvents="none"><View style={styles.backChevron} /></View>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.navBtn} onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}>
                   <Text style={styles.flipText}>Girar</Text>
@@ -598,7 +598,8 @@ const styles = StyleSheet.create({
     borderRadius: 24, paddingHorizontal: 14, paddingVertical: 10,
   },
   navBtn: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 24, minWidth: 46, paddingHorizontal: 14, paddingVertical: 10, justifyContent: 'center', alignItems: 'center' },
-  navBackText: { color: '#fff', fontSize: 30, lineHeight: 20 },
+  backIcon: { width: 18, height: 20, alignItems: 'center', justifyContent: 'center' },
+  backChevron: { width: 9, height: 9, borderLeftWidth: 2, borderBottomWidth: 2, borderColor: '#fff', transform: [{ translateX: 2 }, { rotate: '45deg' }] },
   flipText:         { color: '#fff', fontSize: 13 },
   captureBtn: {
     width: 76, height: 76, borderRadius: 38,

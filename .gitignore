@@ -1,4 +1,9 @@
 # Logs
+/analysis/
+/object-counter-app/log.txt
+/object-counter-app/capturas_sprints/
+**/Ultralytics/
+**/__pycache__/
 logs
 *.log
 npm-debug.log*
