@@ -18,6 +18,7 @@ def project(points, matrix):
 class Landmark:
     center: np.ndarray
     radius: float
+    footprint: np.ndarray
     hits: int = 1
     id: int = 0
 
@@ -34,6 +35,14 @@ class SurfaceScan:
         self.latest = None
         self.landmarks = []
         self.total = 0
+        self.appearance_tracking = False
+
+    def use_appearance(self, has_candidates):
+        # Once the reference's appearance has worked, an empty frame means
+        # no visible candidates, not a reason to switch detectors mid-session.
+        with self.lock:
+            self.appearance_tracking |= bool(has_candidates)
+            return self.appearance_tracking
 
     def _align(self, points, descriptors, shape, usable_area):
         h, w = shape
@@ -108,22 +117,42 @@ class SurfaceScan:
                     if not full:
                         boxes.append({**o, 'id': 0, 'confirmado': False})
                         continue
-                    center, edge = project([[o['cx']*w, o['cy']*h],
-                        [(o['cx']+min(o['w'], o['h'])/2)*w, o['cy']*h]], world)
+                    x, y, bw, bh = o['cx']*w, o['cy']*h, o['w']*w, o['h']*h
+                    footprint = cv2.convexHull(project([
+                        [x-bw/2, y-bh/2], [x+bw/2, y-bh/2],
+                        [x+bw/2, y+bh/2], [x-bw/2, y+bh/2]], world))
+                    center, edge = project([[x, y], [x+min(bw, bh)/2, y]], world)
                     radius = max(5, min(20, float(np.linalg.norm(edge-center))*0.8))
-                    nearby = [(float(np.linalg.norm(l.center-center)), i) for i, l in enumerate(self.landmarks)
-                              if np.linalg.norm(l.center-center) <= max(radius, l.radius)]
+                    nearby = []
+                    for i, landmark in enumerate(self.landmarks):
+                        distance = float(np.linalg.norm(landmark.center-center))
+                        # A perspective change moves the center of an axis-aligned
+                        # detection even when the stationary object is unchanged.
+                        # Compare its occupied map area as well as its center.
+                        intersection, _ = cv2.intersectConvexConvex(footprint, landmark.footprint)
+                        area = cv2.contourArea(footprint)
+                        previous_area = cv2.contourArea(landmark.footprint)
+                        union = area + previous_area - intersection
+                        overlap = intersection / max(1, union)
+                        contained = intersection / max(1, min(area, previous_area))
+                        comparable = min(area, previous_area) / max(1, area, previous_area)
+                        if (distance <= max(radius, landmark.radius) or overlap >= 0.30
+                                or (contained >= 0.80 and comparable >= 0.20)):
+                            # Prefer an already confirmed identity over a nearby
+                            # tentative box; otherwise a transient split can be
+                            # confirmed as a duplicate on the following image.
+                            nearby.append((not bool(landmark.id), distance, i))
                     nearby.sort()
                     # An ambiguous second box must not create an extra identity.
-                    if nearby and nearby[0][1] in used:
+                    if nearby and nearby[0][2] in used:
                         continue
                     if nearby:
-                        _, idx = nearby[0]
+                        _, _, idx = nearby[0]
                         landmark = self.landmarks[idx]
                         landmark.hits += 1
                     else:
                         idx = len(self.landmarks)
-                        landmark = Landmark(center, radius)
+                        landmark = Landmark(center, radius, footprint)
                         self.landmarks.append(landmark)
                     used.add(idx)
                     if landmark.hits >= 2 and not landmark.id:

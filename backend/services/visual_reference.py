@@ -22,12 +22,15 @@ def crear_perfil_visual(image: Image.Image, caja: tuple[float, float, float, flo
                (np.abs(referencia[:, :, 2].astype(np.float32)-centro[2]) <= 100)).astype(np.uint8)*255
     contornos, _ = cv2.findContours(mascara, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     aspecto_ar = max(ancho / alto, alto / ancho)
+    longitud_ar = max(ancho, alto)
     if contornos:
         lados = sorted(cv2.minAreaRect(max(contornos, key=cv2.contourArea))[1])
         if lados[0] >= 2:
             aspecto_ar = lados[1] / lados[0]
+            longitud_ar = lados[1]
     return {
         "aspecto_ar": aspecto_ar,
+        "longitud_relativa": longitud_ar / max(image.width, image.height),
         "centro_hsv": centro,
         "tolerancia_h": max(8, min(22, round(float(np.std(saturados[:, 0]) * 1.8)))),
         "tolerancia_s": max(45, min(100, round(float(np.std(saturados[:, 1]) * 2.2)))),
@@ -103,6 +106,12 @@ def detectar_por_perfil_ar(image: Image.Image, perfil: dict, etiqueta: str):
         menor, mayor = sorted((lado_a, lado_b))
         if menor < 1 or mayor < 8:
             continue
+        # Area alone admits tiny background marks when a slender reference has
+        # a large diagonal bounding box. Compare its oriented length as well;
+        # this still permits viewing the same object from five times farther.
+        longitud_referencia = perfil.get("longitud_relativa", 0) * max(image.size)
+        if mayor < 0.20 * longitud_referencia:
+            continue
         aspecto = mayor / menor
         aspecto_referencia = perfil.get("aspecto_ar", perfil["aspecto"])
         if not max(1, aspecto_referencia * 0.30) <= aspecto <= aspecto_referencia * 3.2:
@@ -118,6 +127,15 @@ def detectar_por_perfil_ar(image: Image.Image, perfil: dict, etiqueta: str):
             continue
         relleno = area / max(1, lado_a * lado_b)
         if relleno < 0.25:
+            continue
+        # The loose hue band keeps shaded edges connected, but a candidate
+        # must also contain the reference colour itself. Otherwise cyan print
+        # near a blue pen is accepted merely because the tolerance bands touch.
+        region = np.zeros((h, w), np.uint8)
+        cv2.drawContours(region, [contorno - [x, y]], -1, 255, cv2.FILLED)
+        candidate = (region > 0) & (mascara[y:y+h, x:x+w] > 0)
+        core = tono[y:y+h, x:x+w] <= max(5, perfil['tolerancia_h'] * 0.5)
+        if np.count_nonzero(core & candidate) < 0.25 * max(1, np.count_nonzero(candidate)):
             continue
         # Es evidencia de apariencia, no una probabilidad de identificación.
         predicciones.append((etiqueta, min(0.90, 0.5 + relleno * 0.4), (x, y, x + w, y + h)))

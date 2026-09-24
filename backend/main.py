@@ -5,6 +5,7 @@ from ultralytics import YOLO, YOLOWorld
 from routes.static_count import crear_router as crear_router_conteo_estatico
 from services.static_counter import StaticImageCounter
 from services.surface_scan import SurfaceScan
+from services.detection_categories import device_category
 from services.visual_reference import crear_perfil_visual, detectar_por_perfil, detectar_por_perfil_ar
 from deep_translator import GoogleTranslator
 import io
@@ -110,6 +111,9 @@ def normalizar(texto: str) -> str:
 def obtener_candidatos(prompt: str) -> tuple[str, list[str]]:
     """Convierte el nombre del usuario en etiquetas en inglés para YOLO-World."""
     prompt_normalizado = normalizar(prompt)
+    device = device_category(prompt_normalizado)
+    if device:
+        return device[1][0], device[1]
     candidatos = list(ALIASES_YOLO.get(prompt_normalizado, []))
     traduccion = traducir_a_ingles(prompt_normalizado) if prompt_normalizado else ""
 
@@ -136,6 +140,13 @@ def ejecutar_inferencia(image: Image.Image, candidatos: list[str], confianza: fl
         else:
             print("[YOLO] Reutilizando clases ya configuradas.")
         return model(image, conf=confianza, imgsz=imgsz, verbose=False)
+
+
+def inferir_dispositivo(image: Image.Image, class_id: int, imgsz: int):
+    # COCO includes screens, laptops, mice and keyboards. Restrict the classes
+    # on every call because this model is also used by static photo counting.
+    with model_lock:
+        return model_general(image, classes=[class_id], conf=0.25, imgsz=imgsz, verbose=False)
 
 
 def recortar_imagen(image: Image.Image, caja: tuple[float, float, float, float] | None = None) -> Image.Image:
@@ -370,15 +381,25 @@ async def detect(
     print(f"🎯 [/detect] Clases enviadas a YOLO: {candidatos}")
 
     es_ar = modo in ("ar_espacial", "barrido")
+    dispositivo = device_category(clase) if es_ar else None
+    # Equipment is counted by category, including different colours/models.
+    # A dark reference must not turn background patches into equipment.
+    if dispositivo:
+        perfil_apariencia = None
+        usar_similitud = False
     detector_perfil = detectar_por_perfil_ar if es_ar else detectar_por_perfil
     candidatos_apariencia = await run_in_threadpool(detector_perfil, image, perfil_apariencia, candidatos[0]) if perfil_apariencia else []
+    usar_apariencia = not dispositivo and (recorrido.use_appearance(candidatos_apariencia) if recorrido else bool(candidatos_apariencia))
     try:
         # Una foto masiva conserva más detalle para objetos pequeños; el modo
         # tiempo real sigue siendo más rápido para la cámara en vivo.
         imgsz = 960 if modo == "foto_masiva" else 640
-        results = [] if candidatos_apariencia else await run_in_threadpool(
-            ejecutar_inferencia, image, candidatos, 0.06, imgsz
-        )
+        if dispositivo:
+            results = await run_in_threadpool(inferir_dispositivo, image, dispositivo[0], imgsz)
+        elif usar_apariencia:
+            results = []
+        else:
+            results = await run_in_threadpool(ejecutar_inferencia, image, candidatos, 0.06, imgsz)
     except Exception as e:
         print(f"❌ [/detect ERROR] Fallo en la inferencia del loop: {e}")
         if es_ar:
@@ -458,7 +479,7 @@ async def detect(
 
     # Imprime un resumen corto en una sola línea por cada frame
     duracion = round(time.time() - t0, 3)
-    ruta = "apariencia" if candidatos_apariencia else "yolo"
+    ruta = "coco_dispositivo" if dispositivo else "apariencia" if usar_apariencia else "yolo"
     print(f"🔍 [/detect RESULTADO] Filtro: '{clase}' | Objetos: {len(objetos)} | Ruta: {ruta} | Tiempo: {duracion}s")
 
     respuesta = {"objetos": objetos}
@@ -498,7 +519,7 @@ def convertir_resultados(results) -> list[tuple[str, float, tuple[float, float, 
 
 def inferir_general_estatico(image: Image.Image, confianza: float, imgsz: int):
     with model_lock:
-        return convertir_resultados(model_general(image, conf=confianza, imgsz=imgsz, verbose=False))
+        return convertir_resultados(model_general(image, classes=None, conf=confianza, imgsz=imgsz, verbose=False))
 
 
 def inferir_abierto_estatico(image: Image.Image, confianza: float, imgsz: int, objetivo: str):

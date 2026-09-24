@@ -2,5 +2,10 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true
-  }
+  },
+  "exclude": [
+    "node_modules", "android", "ios",
+    "babel.config.js", "metro.config.js", "jest.config.js",
+    "yolovenv", "Ultralytics", "yolov8n_saved_model"
+  ]
 }

@@ -332,6 +332,7 @@ export default function CameraScreen() {
             }
           }}
           photo
+          photoQualityBalance="speed"
           resizeMode="cover"
           outputOrientation="preview"
           onLayout={({ nativeEvent }) => setTamanoPreview(nativeEvent.layout)}
@@ -372,7 +373,7 @@ export default function CameraScreen() {
               };
             })()]}>
               <Text style={[styles.detectionId, { backgroundColor: caja.confirmado ? '#4ADE80' : '#fbbf24' }]} numberOfLines={1}>
-                {caja.confirmado ? `#${caja.id} contado` : 'Detectado · por confirmar'}
+                {caja.confirmado ? `#${caja.id}` : 'Pendiente'}
               </Text>
             </View>
           ))}
