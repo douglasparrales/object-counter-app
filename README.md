@@ -2,13 +2,10 @@
 
 Aplicación móvil Android construida con Expo SDK 55 y React Native. Permite contar objetos desde una fotografía y contar objetos durante un recorrido con memoria de posiciones. El backend usa FastAPI, YOLO y YOLO-World.
 
-La rama `main` integra el conteo por foto y por recorrido. El módulo ARCore nativo permanece experimental y oculto; no es el motor del conteo principal. La validación física disponible corresponde a esferos; falta evaluar la precisión con equipos informáticos reales.
-
 ## Estado y alcance actual
 
 - **Contar en una foto:** selección de referencia, detección y corrección manual antes de guardar.
 - **Contar con la cámara:** registra superficies aproximadamente planas con detalles visuales y asigna posiciones e IDs persistentes a objetos inmóviles. Conserva el total fuera del encuadre y pausa incorporaciones cuando pierde la referencia visual.
-- **ARCore nativo:** permanece en el código como experimento, con acceso oculto. El conteo principal usa VisionCamera y el mapa de superficie del backend.
 - **Reportes:** guardado explícito en SQLite. La conexión al servidor se configura desde el menú y se conserva entre reinicios.
 
 ## Estructura del repositorio
@@ -19,8 +16,6 @@ object-counter-app/  aplicación Expo/React Native
 ```
 
 Los pesos de YOLO (`*.pt`), los entornos virtuales, `node_modules/` y las carpetas nativas generadas no se versionan. En una máquina limpia deben descargarse o generarse siguiendo esta guía.
-
-La carpeta local `analysis/` contiene material temporal de pruebas, no es necesaria para ejecutar la app y está excluida de Git.
 
 ## Requisitos
 
@@ -221,7 +216,7 @@ La carpeta `android/` es generada y está ignorada por Git. El plugin configura 
 3. Pulsa **Contar**. Mantén objetos quietos sobre una superficie aproximadamente plana con detalles.
 4. Avanza lentamente con vistas solapadas. Verde indica un objeto confirmado; amarillo, una detección pendiente.
 5. Los objetos confirmados permanecen en el total fuera del encuadre. Si se pierde la referencia visual, vuelve a una zona conocida.
-6. Pulsa **Finalizar**, después **Guardar** si deseas conservar el reporte. El botón Guardar tiene una pulsación sutil; Listo no tiene animación propia.
+6. Pulsa **Finalizar**, después **Guardar** si deseas conservar el reporte.
 
 La captura siguiente empieza después de procesar la anterior y una espera de 400 ms. Esto no equivale a una frecuencia garantizada: depende del dispositivo, la red y la inferencia.
 
@@ -265,7 +260,7 @@ Desinstala el development build anterior y ejecuta nuevamente `npx expo run:andr
 
 El backend registra detecciones, duración y estado del seguimiento (`[BARRIDO]`); Expo muestra el resultado recibido y errores de captura o conexión. El conteo por recorrido conserva IDs sobre un mapa de superficie aproximadamente plana con detalles visibles. Los objetos deben permanecer inmóviles; perder el registro pausa nuevas incorporaciones y conserva el total. Los recuadros pueden llevar retraso durante el movimiento.
 
-La referencia no entrena un modelo nuevo. Los equipos informáticos usan categorías del detector; la clase de pantallas no distingue exclusivamente monitores de televisores. La validación física disponible es con esferos, no con equipos reales ni recorridos a distintas profundidades.
+La referencia no entrena un modelo nuevo. Los equipos informáticos usan categorías del detector; la clase de pantallas no distingue exclusivamente monitores de televisores.
 
 `main` contiene la integración actual. `respaldo/main-antes-conteo-20260924` conserva el estado anterior. El módulo ARCore permanece experimental y oculto.
 
@@ -283,7 +278,7 @@ Estado verificado en GitHub el 24 de septiembre de 2026:
 
 | Rama | Hasta dónde llega |
 | --- | --- |
-| `main` | Versión integrada actual: conteo por foto y por recorrido con memoria de IDs, reportes, configuración de conexión, interfaz unificada y limpieza del repositorio. Probada físicamente con esferos; equipos informáticos pendientes de validación real. |
+| `main` | Versión integrada actual: conteo por foto y por recorrido con memoria de IDs, reportes, configuración de conexión, interfaz unificada y limpieza del repositorio. Equipos informáticos pendientes de validación real. |
 | `feature/arcore-native-counting` | En GitHub permanece en `02fa286`: avances experimentales de ARCore nativo, anteriores a las correcciones finales del recorrido y la interfaz. No es la versión más reciente para ejecutar la app. |
 | `respaldo/main-antes-conteo-20260924` | Copia de main en `5150321`, anterior a la integración: conteo por foto y conteo de objetos visibles, reportes y configuración de IP; sin la nueva memoria del recorrido fuera del encuadre. |
 
