@@ -1,6 +1,7 @@
+import BackButton from '../components/BackButton';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMemo } from 'react';
-import { PanResponder, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { PanResponder, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import AppMenu from '../components/AppMenu';
 
@@ -14,7 +15,7 @@ export default function AboutScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: '#10151c' }}>
     <View style={styles.container} {...gestoHistorial.panHandlers}>
       <View style={[styles.menu, { top: 8 }]}><AppMenu /></View>
-      <TouchableOpacity onPress={() => router.back()} style={[styles.topBack, { top: 10 }]}><Text style={styles.topBackText}>‹</Text></TouchableOpacity>
+      <BackButton onPress={() => router.back()} style={[styles.topBack, { top: 10 }]} />
       <View style={styles.content}>
         <Text style={styles.title}>Object Counter</Text>
         <Text style={styles.text}>Cuenta objetos en una foto o recorre una superficie con la cámara. Revisa tus resultados y guárdalos con su ubicación.</Text>
@@ -34,5 +35,4 @@ const styles = StyleSheet.create({
   version: { color: '#909aa5', marginTop: 22, fontSize: 14 },
   menu: { position: 'absolute', top: 42, left: 10, zIndex: 1 },
   topBack: { position: 'absolute', top: 45, right: 14, width: 38, height: 38, borderRadius: 19, backgroundColor: '#202934', justifyContent: 'center', alignItems: 'center', zIndex: 1 },
-  topBackText: { color: '#fff', fontSize: 34, lineHeight: 34 },
 });

@@ -20,7 +20,7 @@ object-counter-app/  aplicación Expo/React Native
 
 Los pesos de YOLO (`*.pt`), los entornos virtuales, `node_modules/` y las carpetas nativas generadas no se versionan. En una máquina limpia deben descargarse o generarse siguiendo esta guía.
 
-Para recoger errores y entender los registros, consulta [la guía de diagnóstico](docs/diagnostico.md). La carpeta local `analysis/` contiene material temporal de pruebas, no es necesaria para ejecutar la app y está excluida de Git.
+La carpeta local `analysis/` contiene material temporal de pruebas, no es necesaria para ejecutar la app y está excluida de Git.
 
 ## Requisitos
 
@@ -193,7 +193,7 @@ En una máquina limpia, Expo generará la carpeta nativa `android/`, ejecutará 
 
 Acepta el permiso de cámara cuando la aplicación lo solicite. Si cambias configuraciones nativas, plugins, iconos o el modelo AR, vuelve a ejecutar `npx expo run:android`; una recarga de Metro no aplica esos cambios al binario instalado.
 
-En la rama AR, si `object-counter-app/android/` ya existía antes de cambiar de rama o antes de modificar `plugins/native-arcore`, regenera primero el proyecto nativo para que Expo copie y registre el módulo actualizado:
+Si `object-counter-app/android/` ya existía antes de cambiar de rama o antes de modificar `plugins/native-arcore`, regenera primero el proyecto nativo para que Expo copie y registre el módulo actualizado:
 
 ```powershell
 npx expo prebuild --clean --platform android
@@ -227,7 +227,6 @@ La captura siguiente empieza después de procesar la anterior y una espera de 40
 
 El mapa vive durante la sesión del backend. Reiniciar el servidor pierde ese mapa. Ningún objeto que nunca haya aparecido en una captura puede contarse. Para superficies lisas, objetos móviles o distintas profundidades no se garantiza precisión.
 
-Detalles técnicos e historial de AR: [docs/ar-counting.md](docs/ar-counting.md).
 
 ## Red e Internet
 
@@ -262,38 +261,18 @@ Confirma que la primera ejecución del backend tenga Internet y permisos para es
 
 Desinstala el development build anterior y ejecuta nuevamente `npx expo run:android`. Los cambios nativos no se aplican sólo recargando JavaScript.
 
-## Logs y limitaciones
+## Funcionamiento y limitaciones
 
-- El backend registra peticiones, etiquetas enviadas a YOLO, resultados y duración.
-- Metro muestra mensajes con prefijos como `[Camera]`, `[YOLO]`, `[Backend]`, `[Detección]`, `[Tracking]` y `[AR]`.
-- Cuando un objeto cumple la estabilidad temporal aparece `[Tracking] Objeto estable confirmado #...`.
-- YOLO-World utiliza el nombre como etiqueta; una foto de referencia no entrena una clase nueva.
-- La comparación visual ayuda a filtrar candidatos, pero no garantiza reconocer cualquier objeto desconocido.
-- El modo estable reduce duplicados mediante consenso temporal, pero no reconstruye el espacio físico. AR usa referencias espaciales compartidas y asociación de una observación por identidad y lote, con tolerancia ajustada al tamaño observado (8–25 mm).
-- El escaneo AR automático requiere superficies o profundidad válidas. Objetos suspendidos, reflectantes, transparentes o demasiado juntos pueden necesitar corrección manual.
-- El inventario debe permanecer quieto durante una sesión. Si un objeto contado cambia físicamente de lugar, su ancla anterior no se mueve con él y una detección en la nueva posición podría sumarlo otra vez.
-- Los objetos y capturas cercanos comparten anclas regionales (hasta 1,5 m del origen de cada región), evitando anclas independientes para cada detección. La precisión con objetos muy juntos y recorridos extensos necesita validación física.
-- El modo estable reduce duplicados mediante consenso temporal, pero no reconstruye el espacio físico. La garantía espacial fuera del encuadre es el objetivo de la rama ARCore nativa.
+El backend registra detecciones, duración y estado del seguimiento (`[BARRIDO]`); Expo muestra el resultado recibido y errores de captura o conexión. El conteo por recorrido conserva IDs sobre un mapa de superficie aproximadamente plana con detalles visibles. Los objetos deben permanecer inmóviles; perder el registro pausa nuevas incorporaciones y conserva el total. Los recuadros pueden llevar retraso durante el movimiento.
 
+La referencia no entrena un modelo nuevo. Los equipos informáticos usan categorías del detector; la clase de pantallas no distingue exclusivamente monitores de televisores. La validación física disponible es con esferos, no con equipos reales ni recorridos a distintas profundidades.
 
-## Desarrollo por ramas
-
-- `main`: aplicación estable (foto estática, conteo en tiempo real y reportes).
-- `feature/arcore-native-counting`: experimento ARCore nativo derivado de `main`.
-
-Deuda conocida de `main`: eliminar las dependencias nativas Viro/ONNX/TFLite que quedaron del prototipo AR anterior. No deben confundirse con la nueva implementación ARCore nativa ni implican que AR esté disponible en la versión estable.
-
-Publicación inicial de ambas ramas:
-
-```powershell
-git switch main
-git push -u origin main
-git switch feature/arcore-native-counting
-git push -u origin feature/arcore-native-counting
-```
-
-Cuando AR cumpla sus criterios de aceptación, actualiza ambas ramas y fusiona mediante un pull request de `feature/arcore-native-counting` hacia `main`. Antes de fusionar, resuelve conflictos en la rama de la característica y vuelve a validar la app; no trabajes directamente sobre `main`.
+`main` contiene la integración actual. `respaldo/main-antes-conteo-20260924` conserva el estado anterior. El módulo ARCore permanece experimental y oculto.
 
 ## Datos locales
 
 SQLite almacena las sesiones guardadas, resultados y eventos de auditoría. Las fotografías confirmadas se copian al directorio de documentos de la aplicación para que continúen disponibles en el historial. Estos datos permanecen en el dispositivo y pueden perderse al borrar sus datos o desinstalar la aplicación.
+
+## Para pasar a producción
+
+La app necesita validar precisión con equipos reales y distintas condiciones, mejorar el seguimiento entre profundidades, desplegar un backend seguro y estable, definir respaldo y privacidad de los datos y completar pruebas de rendimiento, recuperación de errores y distribución firmada.

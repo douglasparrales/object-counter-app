@@ -1,5 +1,8 @@
 # Logs
 /analysis/
+/docs/diagnostico.md
+/docs/main-integration.md
+/docs/ar-counting.md
 /object-counter-app/log.txt
 /object-counter-app/capturas_sprints/
 **/Ultralytics/

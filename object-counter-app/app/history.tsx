@@ -1,7 +1,8 @@
+import BackButton from '../components/BackButton';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { ActivityIndicator, FlatList, Image, PanResponder, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, PanResponder, StyleSheet, Text, View } from 'react-native';
 import { listarReportes, ReporteGuardado } from '../db/client';
 import AppMenu from '../components/AppMenu';
 
@@ -37,7 +38,7 @@ export default function HistoryScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Reportes</Text>
         <Text style={styles.swipeHint}>Consulta tus conteos guardados y sus ubicaciones.</Text>
-        <TouchableOpacity style={styles.back} onPress={() => router.back()}><Text style={styles.backText}>‹</Text></TouchableOpacity>
+        <BackButton style={styles.back} onPress={() => router.back()} />
         <View style={styles.menu}><AppMenu /></View>
       </View>
       <FlatList
@@ -71,7 +72,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#10151c' },
   header: { paddingTop: 24, paddingHorizontal: 20, paddingBottom: 18, borderBottomWidth: 1, borderColor: '#27303a' },
   back: { position: 'absolute', top: 10, right: 10, width: 38, height: 38, borderRadius: 19, backgroundColor: '#202934', justifyContent: 'center', alignItems: 'center' },
-  backText: { color: '#fff', fontSize: 34, lineHeight: 34 },
   title: { color: '#fff', fontSize: 28, fontWeight: '800', marginTop: 36 },
   swipeHint: { color: '#9da7b2', fontSize: 12, marginTop: 6 },
   menu: { position: 'absolute', top: 8, left: 10 },

@@ -1,3 +1,4 @@
+import BackButton from '../components/BackButton';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -411,9 +412,7 @@ export default function CameraScreen() {
       )}
 
       <View style={styles.controls} pointerEvents={preparandoAr ? 'none' : 'auto'}>
-        <TouchableOpacity style={styles.navBtn} onPress={() => router.back()}>
-          <View style={styles.backIcon} pointerEvents="none"><View style={styles.backChevron} /></View>
-        </TouchableOpacity>
+        <BackButton style={styles.navBtn} onPress={() => router.back()} />
         <TouchableOpacity disabled={isDetecting} style={[styles.navBtn, isDetecting && styles.disabledBtn]} onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}>
           <Text style={styles.flipText}>Girar</Text>
         </TouchableOpacity>
@@ -470,9 +469,7 @@ export default function CameraScreen() {
               <View style={styles.modalMenu}><AppMenu /></View>
               <Text style={styles.modalHint}>Encuadra el objeto que quieres contar</Text>
               <View style={styles.modalControls}>
-                <TouchableOpacity style={styles.navBtn} onPress={cerrarModalReferencia}>
-                  <View style={styles.backIcon} pointerEvents="none"><View style={styles.backChevron} /></View>
-                </TouchableOpacity>
+                <BackButton style={styles.navBtn} onPress={cerrarModalReferencia} />
                 <TouchableOpacity style={styles.navBtn} onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}>
                   <Text style={styles.flipText}>Girar</Text>
                 </TouchableOpacity>
@@ -598,8 +595,6 @@ const styles = StyleSheet.create({
     borderRadius: 24, paddingHorizontal: 14, paddingVertical: 10,
   },
   navBtn: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 24, minWidth: 46, paddingHorizontal: 14, paddingVertical: 10, justifyContent: 'center', alignItems: 'center' },
-  backIcon: { width: 18, height: 20, alignItems: 'center', justifyContent: 'center' },
-  backChevron: { width: 9, height: 9, borderLeftWidth: 2, borderBottomWidth: 2, borderColor: '#fff', transform: [{ translateX: 2 }, { rotate: '45deg' }] },
   flipText:         { color: '#fff', fontSize: 13 },
   captureBtn: {
     width: 76, height: 76, borderRadius: 38,

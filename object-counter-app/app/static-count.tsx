@@ -1,3 +1,4 @@
+import BackButton from '../components/BackButton';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Modal, PanResponder, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -193,7 +194,7 @@ export default function StaticCountScreen() {
       <View style={styles.menu}><AppMenu /></View>
       <View style={styles.top}><Text style={styles.title}>Conteo desde foto</Text><Text style={styles.hint}>Encuadra todos los objetos y toma una sola foto.</Text></View>
       <View style={styles.bottom}>
-        <TouchableOpacity style={styles.navBtn} onPress={() => router.back()}><Text style={styles.navBackText}>‹</Text></TouchableOpacity>
+        <BackButton style={styles.navBtn} onPress={() => router.back()} />
         <TouchableOpacity style={styles.navBtn} onPress={() => setFacing((actual) => actual === 'back' ? 'front' : 'back')}><Text style={styles.navText}>Girar</Text></TouchableOpacity>
         {procesando ? <View style={styles.capture}><ActivityIndicator color="#10151c" /></View> : <TouchableOpacity style={styles.capture} onPress={tomarYContar}><Text style={styles.captureText}>Contar</Text></TouchableOpacity>}
       </View>
@@ -311,7 +312,7 @@ const styles = StyleSheet.create({
   menu: { position: 'absolute', top: 8, left: 10,  },
   top: { position: 'absolute', top: 64, left: 20, right: 20, backgroundColor: 'rgba(0,0,0,0.62)', borderRadius: 12, padding: 12 }, title: { color: '#fff', fontSize: 18, fontWeight: '800' }, hint: { color: '#c0c8d0', marginTop: 4, fontSize: 13 },
   historyHint: { position: 'absolute', bottom: 110, left: 24, right: 24, alignItems: 'center' }, historyHintText: { color: '#fff', fontSize: 12, backgroundColor: 'rgba(0,0,0,0.65)', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 12 },
-  bottom: { position: 'absolute', bottom: 16, left: 20, right: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 14 }, navBtn: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 24, minWidth: 46, paddingHorizontal: 14, paddingVertical: 10, justifyContent: 'center', alignItems: 'center' }, navBackText: { color: '#fff', fontSize: 30, lineHeight: 20 }, navText: { color: '#fff', fontSize: 13 }, capture: { width: 76, height: 76, backgroundColor: '#4ADE80', borderRadius: 38, justifyContent: 'center', alignItems: 'center' }, captureText: { color: '#10151c', fontWeight: '700', fontSize: 13 },
+  bottom: { position: 'absolute', bottom: 16, left: 20, right: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 14 }, navBtn: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 24, minWidth: 46, paddingHorizontal: 14, paddingVertical: 10, justifyContent: 'center', alignItems: 'center' }, navText: { color: '#fff', fontSize: 13 }, capture: { width: 76, height: 76, backgroundColor: '#4ADE80', borderRadius: 38, justifyContent: 'center', alignItems: 'center' }, captureText: { color: '#10151c', fontWeight: '700', fontSize: 13 },
   auditContainer: { flex: 1, backgroundColor: '#0b1016', paddingTop: 16, paddingHorizontal: 16, paddingBottom: 24 },
   auditHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   auditTitle: { color: '#fff', fontSize: 21, fontWeight: '800' }, auditTotal: { color: '#4ADE80', fontSize: 15, marginTop: 2, fontWeight: '700' },
