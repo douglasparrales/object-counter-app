@@ -94,7 +94,7 @@ Los pesos personalizados incluidos en `backend/models/` ya contienen el aprendiz
 python training/serve_backend.py --profile aula --host 0.0.0.0 --port 8000
 ```
 
-`--profile aula` es el perfil predeterminado del lanzador y habilita monitor, mouse y teclado. Para mouse combina el modelo nuevo con el anterior y descarta cajas repetidas; monitor conserva el anterior y teclado usa el nuevo. `--profile aula-anterior` conserva el detector previo de monitor + mouse; `--profile monitores` conserva monitores v3; `--profile original` activa las rutas originales. `--check` verifica todos los checkpoints del perfil sin iniciar el servidor.
+`aula` es el perfil predeterminado del lanzador: escribir `--profile aula` u omitirlo produce exactamente la misma configuración, modelos y comportamiento de conteo. Habilita los detectores personalizados de monitor, mouse y teclado, y conserva el reconocimiento original para los demás objetos en el mismo servidor. No necesitas cambiar de perfil ni reiniciar el servidor según el objeto que quieras contar. Para mouse combina el modelo nuevo con el anterior y descarta cajas repetidas; monitor conserva el anterior y teclado usa el nuevo. `--profile aula-anterior` conserva el detector previo de monitor + mouse; `--profile monitores` conserva monitores v3; `--profile original` activa las rutas originales. `--check` verifica todos los checkpoints del perfil sin iniciar el servidor.
 
 En la app escribe **monitor**, **mouse** o **teclado**, nunca aula. Si ya tienes la APK instalada, basta actualizar e iniciar este backend y configurar su dirección: no necesitas compilar ni reinstalar la app. Las secciones de Android siguientes son para quien necesite generar una APK.
 
@@ -161,11 +161,25 @@ cd ..
 python training/serve_backend.py --profile aula --host 0.0.0.0 --port 8000
 ```
 
-Sin activar el entorno:
+Usando el entorno virtual sin activarlo:
 
 ```powershell
 .\backend\.venv\Scripts\python.exe training/serve_backend.py --profile aula --host 0.0.0.0 --port 8000
 ```
+
+Sin utilizar un entorno virtual, desde la raíz del repositorio, instala las dependencias en tu Python global la primera vez (o cuando cambien):
+
+```powershell
+python -m pip install -r backend/requirements.txt -c backend/constraints-inference.txt
+```
+
+Después, cada vez que quieras encender el servidor, ejecuta desde esa misma raíz:
+
+```powershell
+python training/serve_backend.py --host 0.0.0.0 --port 8000
+```
+
+Omitir `--profile aula` en este comando equivale exactamente a incluirlo, porque `aula` es el valor predeterminado. No necesitas repetir la instalación de dependencias en cada arranque.
 
 En macOS/Linux:
 
@@ -176,7 +190,7 @@ cd ..
 python training/serve_backend.py --profile aula --host 0.0.0.0 --port 8000
 ```
 
-El lanzador establece el directorio correcto del backend. Cambia `monitores` por `aula` para probar el candidato conjunto o por `original` para las rutas anteriores. En el computador se puede comprobar FastAPI en:
+El lanzador entra internamente a `backend` y arranca Uvicorn con los modelos configurados; por eso se ejecuta desde la raíz y no necesitas iniciar otro Uvicorn aparte. Deja la terminal abierta mientras usas la APK. Los otros perfiles sirven para comparar versiones o volver al comportamiento anterior; no son necesarios para cambiar de objeto. Puedes desconectar el USB y usar la APK por Wi-Fi si el teléfono y el computador están en la misma red y la app tiene configurada la IP del computador. En el computador se puede comprobar FastAPI en:
 
 ```text
 http://127.0.0.1:8000/docs
