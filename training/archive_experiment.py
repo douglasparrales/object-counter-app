@@ -38,9 +38,17 @@ def archive(experiment, name):
     files += [ROOT/'backend/requirements.txt',ROOT/'backend/constraints-inference.txt']
     files = sorted(set(files))
     hashes = {p.relative_to(ROOT).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
+    parents={}
+    for snapshot in experiment.glob('*-snapshot.json'):
+        parents[snapshot.name]={}
+        for original,digest in json.loads(snapshot.read_text(encoding='utf-8')).get('protected_weights',{}).items():
+            candidates=[name for name,value in hashes.items() if value==digest]
+            if not candidates:raise ValueError(f'Cannot recover training parent: {original}')
+            parents[snapshot.name][original]=dict(sha256=digest,archive_path=original if original in candidates else candidates[0])
     with zipfile.ZipFile(destination,'x',zipfile.ZIP_DEFLATED,compresslevel=3) as z:
         for p in files:z.write(p,p.relative_to(ROOT).as_posix())
         z.writestr('RECOVERY-MANIFEST.json',json.dumps(hashes,indent=2))
+        z.writestr('RECOVERY-PARENTS.json',json.dumps(parents,indent=2))
     with zipfile.ZipFile(destination) as z:
         if z.testzip() is not None:raise ValueError('Archive integrity failure')
         for member,digest in hashes.items():

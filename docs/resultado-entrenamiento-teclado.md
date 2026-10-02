@@ -65,3 +65,10 @@ Estos resultados muestran que todavía faltan ejemplos de objetos pequeños, lej
 Se conservan los experimentos de monitores y aula v1/v2/v3/v4. Cada versión contiene annotations.json, classes.json, dataset.yaml, manifest.json, snapshots, ejecuciones y evaluaciones. Las fotos y los videos siguen ignorados por Git; los checkpoints seleccionados, código, parámetros e informes sí se distribuyen. Una clonación puede inferir sin las imágenes privadas; para repetir el entrenamiento necesita el archivo privado correspondiente.
 
 Las copias verificadas se guardan en media-entrenamiento/backups/. Son copias locales en el mismo disco. No se generó una APK nueva.
+
+
+## Verificación de clonación
+
+Comprobado desde un checkout limpio del commit 07bb913 sin media-entrenamiento/: el lanzador verificó los hashes, inició el backend y reprodujo los 15 casos de foto (dos son rotaciones), todos con conteo y cajas correctos. De 11 replays de barrido, diez coincidieron y el de mouse densos quedó en 25/26. Se reutilizó el entorno Python instalado y los pesos generales ya descargados; no se repitió una instalación de paquetes desde cero. Resultados portables: training/reports/aula-v4-api.json. Pasaron 31 pruebas de backend.
+
+Las copias de recuperación incluyen RECOVERY-PARENTS.json, que localiza los pesos de partida por hash aunque el archivo distribuido se haya sustituido después. Los comandos y el registro de modelos permiten continuar sin confundir checkpoints.

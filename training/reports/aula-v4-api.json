@@ -1,0 +1,489 @@
+{
+  "cases": [
+    {
+      "id": "mouse_00",
+      "target": "mouse",
+      "expected": 1,
+      "photo_count": 1,
+      "photo_correct": true,
+      "route": "aula_experimental",
+      "model_version": "classroom:a9312f25d2c7+previous:84a8e8537b05",
+      "localization": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0,
+        "iou_threshold": 0.5
+      },
+      "scan_frames": [
+        {
+          "total": 0,
+          "visible": 1,
+          "state": "INICIANDO"
+        },
+        {
+          "total": 1,
+          "visible": 1,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 1,
+          "visible": 1,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 1,
+          "visible": 1,
+          "state": "SIGUIENDO"
+        }
+      ],
+      "scan_correct": true
+    },
+    {
+      "id": "mouse_01",
+      "target": "mouse",
+      "expected": 1,
+      "photo_count": 1,
+      "photo_correct": true,
+      "route": "aula_experimental",
+      "model_version": "classroom:a9312f25d2c7+previous:84a8e8537b05",
+      "localization": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0,
+        "iou_threshold": 0.5
+      }
+    },
+    {
+      "id": "mouse_02",
+      "target": "mouse",
+      "expected": 1,
+      "photo_count": 1,
+      "photo_correct": true,
+      "route": "aula_experimental",
+      "model_version": "classroom:a9312f25d2c7+previous:84a8e8537b05",
+      "localization": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0,
+        "iou_threshold": 0.5
+      },
+      "scan_frames": [
+        {
+          "total": 0,
+          "visible": 1,
+          "state": "INICIANDO"
+        },
+        {
+          "total": 1,
+          "visible": 1,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 1,
+          "visible": 1,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 1,
+          "visible": 1,
+          "state": "SIGUIENDO"
+        }
+      ],
+      "scan_correct": true
+    },
+    {
+      "id": "mouse_03",
+      "target": "mouse",
+      "expected": 1,
+      "photo_count": 1,
+      "photo_correct": true,
+      "route": "aula_experimental",
+      "model_version": "classroom:a9312f25d2c7+previous:84a8e8537b05",
+      "localization": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0,
+        "iou_threshold": 0.5
+      }
+    },
+    {
+      "id": "mouse_04",
+      "target": "mouse",
+      "expected": 1,
+      "photo_count": 1,
+      "photo_correct": true,
+      "route": "aula_experimental",
+      "model_version": "classroom:a9312f25d2c7+previous:84a8e8537b05",
+      "localization": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0,
+        "iou_threshold": 0.5
+      }
+    },
+    {
+      "id": "mouse_05",
+      "target": "mouse",
+      "expected": 26,
+      "photo_count": 26,
+      "photo_correct": true,
+      "route": "aula_experimental",
+      "model_version": "classroom:a9312f25d2c7+previous:84a8e8537b05",
+      "localization": {
+        "tp": 26,
+        "fp": 0,
+        "fn": 0,
+        "iou_threshold": 0.5
+      },
+      "scan_frames": [
+        {
+          "total": 0,
+          "visible": 25,
+          "state": "INICIANDO"
+        },
+        {
+          "total": 23,
+          "visible": 25,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 25,
+          "visible": 25,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 25,
+          "visible": 25,
+          "state": "SIGUIENDO"
+        }
+      ],
+      "scan_correct": false
+    },
+    {
+      "id": "mouse_06",
+      "target": "mouse",
+      "expected": 13,
+      "photo_count": 13,
+      "photo_correct": true,
+      "route": "aula_experimental",
+      "model_version": "classroom:a9312f25d2c7+previous:84a8e8537b05",
+      "localization": {
+        "tp": 13,
+        "fp": 0,
+        "fn": 0,
+        "iou_threshold": 0.5
+      },
+      "scan_frames": [
+        {
+          "total": 0,
+          "visible": 13,
+          "state": "INICIANDO"
+        },
+        {
+          "total": 10,
+          "visible": 13,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 13,
+          "visible": 13,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 13,
+          "visible": 13,
+          "state": "SIGUIENDO"
+        }
+      ],
+      "scan_correct": true
+    },
+    {
+      "id": "photo_00",
+      "target": "mouse",
+      "expected": 1,
+      "photo_count": 1,
+      "photo_correct": true,
+      "route": "aula_experimental",
+      "model_version": "classroom:a9312f25d2c7+previous:84a8e8537b05",
+      "localization": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0,
+        "iou_threshold": 0.5
+      }
+    },
+    {
+      "id": "photo_05",
+      "target": "monitor",
+      "expected": 6,
+      "photo_count": 6,
+      "photo_correct": true,
+      "route": "aula_experimental",
+      "model_version": "classroom:a9312f25d2c7+previous:84a8e8537b05",
+      "localization": {
+        "tp": 6,
+        "fp": 0,
+        "fn": 0,
+        "iou_threshold": 0.5
+      },
+      "scan_frames": [
+        {
+          "total": 0,
+          "visible": 6,
+          "state": "INICIANDO"
+        },
+        {
+          "total": 6,
+          "visible": 6,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 6,
+          "visible": 6,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 6,
+          "visible": 6,
+          "state": "SIGUIENDO"
+        }
+      ],
+      "scan_correct": true
+    },
+    {
+      "id": "photo_06",
+      "target": "monitor",
+      "expected": 9,
+      "photo_count": 9,
+      "photo_correct": true,
+      "route": "aula_experimental",
+      "model_version": "classroom:a9312f25d2c7+previous:84a8e8537b05",
+      "localization": {
+        "tp": 9,
+        "fp": 0,
+        "fn": 0,
+        "iou_threshold": 0.5
+      },
+      "scan_frames": [
+        {
+          "total": 0,
+          "visible": 9,
+          "state": "INICIANDO"
+        },
+        {
+          "total": 8,
+          "visible": 9,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 9,
+          "visible": 9,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 9,
+          "visible": 9,
+          "state": "SIGUIENDO"
+        }
+      ],
+      "scan_correct": true
+    },
+    {
+      "id": "keyboard_00",
+      "target": "keyboard",
+      "expected": 1,
+      "photo_count": 1,
+      "photo_correct": true,
+      "route": "aula_experimental",
+      "model_version": "classroom:a9312f25d2c7+previous:84a8e8537b05",
+      "localization": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0,
+        "iou_threshold": 0.5
+      },
+      "scan_frames": [
+        {
+          "total": 0,
+          "visible": 1,
+          "state": "INICIANDO"
+        },
+        {
+          "total": 0,
+          "visible": 1,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 1,
+          "visible": 1,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 1,
+          "visible": 1,
+          "state": "SIGUIENDO"
+        }
+      ],
+      "scan_correct": true
+    },
+    {
+      "id": "keyboard_01",
+      "target": "keyboard",
+      "expected": 1,
+      "photo_count": 1,
+      "photo_correct": true,
+      "route": "aula_experimental",
+      "model_version": "classroom:a9312f25d2c7+previous:84a8e8537b05",
+      "localization": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0,
+        "iou_threshold": 0.5
+      },
+      "scan_frames": [
+        {
+          "total": 0,
+          "visible": 1,
+          "state": "INICIANDO"
+        },
+        {
+          "total": 1,
+          "visible": 1,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 1,
+          "visible": 1,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 1,
+          "visible": 1,
+          "state": "SIGUIENDO"
+        }
+      ],
+      "scan_correct": true
+    },
+    {
+      "id": "keyboard_02",
+      "target": "keyboard",
+      "expected": 3,
+      "photo_count": 3,
+      "photo_correct": true,
+      "route": "aula_experimental",
+      "model_version": "classroom:a9312f25d2c7+previous:84a8e8537b05",
+      "localization": {
+        "tp": 3,
+        "fp": 0,
+        "fn": 0,
+        "iou_threshold": 0.5
+      },
+      "scan_frames": [
+        {
+          "total": 0,
+          "visible": 3,
+          "state": "INICIANDO"
+        },
+        {
+          "total": 2,
+          "visible": 3,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 3,
+          "visible": 3,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 3,
+          "visible": 3,
+          "state": "SIGUIENDO"
+        }
+      ],
+      "scan_correct": true
+    },
+    {
+      "id": "keyboard_00_rotate90",
+      "target": "keyboard",
+      "expected": 1,
+      "photo_count": 1,
+      "photo_correct": true,
+      "route": "aula_experimental",
+      "model_version": "classroom:a9312f25d2c7+previous:84a8e8537b05",
+      "localization": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0,
+        "iou_threshold": 0.5
+      },
+      "scan_frames": [
+        {
+          "total": 0,
+          "visible": 1,
+          "state": "INICIANDO"
+        },
+        {
+          "total": 1,
+          "visible": 1,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 1,
+          "visible": 1,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 1,
+          "visible": 1,
+          "state": "SIGUIENDO"
+        }
+      ],
+      "scan_correct": true
+    },
+    {
+      "id": "keyboard_02_rotate90",
+      "target": "keyboard",
+      "expected": 3,
+      "photo_count": 3,
+      "photo_correct": true,
+      "route": "aula_experimental",
+      "model_version": "classroom:a9312f25d2c7+previous:84a8e8537b05",
+      "localization": {
+        "tp": 3,
+        "fp": 0,
+        "fn": 0,
+        "iou_threshold": 0.5
+      },
+      "scan_frames": [
+        {
+          "total": 0,
+          "visible": 3,
+          "state": "INICIANDO"
+        },
+        {
+          "total": 2,
+          "visible": 3,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 3,
+          "visible": 3,
+          "state": "SIGUIENDO"
+        },
+        {
+          "total": 3,
+          "visible": 3,
+          "state": "SIGUIENDO"
+        }
+      ],
+      "scan_correct": true
+    }
+  ],
+  "limitation": "HTTP replay, original photos and JPEG80 repeated frames; no physical camera or moving-scene validation.",
+  "verification": {
+    "checkout": "07bb913",
+    "private_dataset_present_on_server": false,
+    "dependency_environment": "Existing installed Python dependencies reused; package installation was not repeated",
+    "unit_tests_passed": 31
+  }
+}
