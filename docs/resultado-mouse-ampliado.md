@@ -40,3 +40,5 @@ También se extendió la admisión de objetos parciales al mouse del perfil de a
 Las fotos privadas, anotaciones completas y checkpoints intermedios permanecen fuera de Git y se conservan en archivos de recuperación locales. Son necesarios para repetir exactamente el entrenamiento, no para contar con los pesos distribuidos. Git solo traslada a main lo que se versione y se integre; esta rama no se fusionó automáticamente.
 
 Siguen pendientes la omisión de tres mouse de la imagen ordenada, las omisiones en escenas nuevas y los límites del seguimiento con fondos lisos/oclusiones. Esta ronda está finalizada y reproducible, pero no justifica conteos sin supervisión.
+
+Verificación de distribución: pasaron 26 pruebas del backend. Una clonación local sin media-entrenamiento verificó ambos hashes y arrancó con el lanzador portable. Reprodujo 26 mouse y 6 monitores en foto, y acumulados 25 y 6 en barrido. Se reutilizaron el entorno Python instalado y la caché de YOLOv8n/World; no fue una instalación nueva de dependencias. Evidencia privada en clone-api-ready/results.json. Los servidores temporales se detuvieron al terminar.
