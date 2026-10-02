@@ -16,7 +16,7 @@ training/            lanzador del backend y herramientas de entrenamiento
 object-counter-app/  aplicación Expo/React Native
 ```
 
-Los checkpoints personalizados necesarios para inferencia se versionan bajo `backend/models/`, con sus hashes y perfiles. Los pesos generales originales se descargan al primer inicio. Las fotos privadas, ejecuciones intermedias, entornos virtuales, `node_modules/` y carpetas nativas generadas no se versionan.
+Los checkpoints personalizados necesarios para inferencia se versionan bajo `backend/models/`, con sus hashes y perfiles. Los pesos generales originales se descargan al primer inicio. Las APK y archivos de `artifacts/`, las fotos privadas de `media-entrenamiento/`, las ejecuciones intermedias, los entornos virtuales, `node_modules/` y las carpetas nativas generadas no se versionan ni aparecen al clonar el repositorio.
 
 ## Requisitos
 
@@ -250,7 +250,7 @@ Desinstala el development build anterior y ejecuta nuevamente `npx expo run:andr
 
 El backend registra detecciones, duración y estado del seguimiento (`[BARRIDO]`); Expo muestra el resultado recibido y errores de captura o conexión. El conteo por recorrido conserva IDs sobre un mapa de superficie aproximadamente plana con detalles visibles. Los objetos deben permanecer inmóviles; perder el registro pausa nuevas incorporaciones y conserva el total. Los recuadros pueden llevar retraso durante el movimiento.
 
-La referencia no entrena un modelo nuevo. Los equipos informáticos usan categorías del detector; la clase de pantallas no distingue exclusivamente monitores de televisores.
+La referencia no entrena un modelo nuevo. Con el perfil predeterminado, monitor, mouse y teclado usan los detectores personalizados. En el detector general original, la categoría de pantallas no distingue exclusivamente monitores de televisores.
 
 `main` contiene la integración actual. `respaldo/main-antes-conteo-20260924` conserva el estado anterior. El módulo ARCore permanece experimental y oculto.
 
@@ -262,24 +262,36 @@ SQLite almacena las sesiones guardadas, resultados y eventos de auditoría. Las 
 
 La app necesita validar precisión con equipos reales y distintas condiciones, mejorar el seguimiento entre profundidades, desplegar un backend seguro y estable, definir respaldo y privacidad de los datos y completar pruebas de rendimiento, recuperación de errores y distribución firmada.
 
-## APK recuperada y perfil de instalación directa
+## Obtener una APK de instalación directa
 
-La APK release del artefacto local del 25 de septiembre de 2026 está en `artifacts/release/app-release.apk`. El archivo `artifacts/preview-96c14d04.tar.gz` contiene esa APK y una de depuración; no se debe renombrar `.gz` a `.apk`. Ambas son archivos distintos dentro del contenedor. La APK release fue verificada e instalada por USB.
+**El repositorio no incluye ninguna APK.** La carpeta `artifacts/` está ignorada por Git y solo existe en la máquina donde se guardaron los archivos de compilación. Al clonar no encontrarás `artifacts/release/app-release.apk` ni el archivo comprimido usado durante las pruebas.
 
-El perfil `preview` de `object-counter-app/eas.json` ahora solicita `buildType: apk` y limita `applicationArchivePath` a `android/app/build/outputs/apk/release/app-release.apk`, para seleccionar únicamente ese archivo en futuros builds. No se ejecutó un nuevo build de EAS para comprobar esa entrega remota. Desde `object-counter-app/`, el comando del perfil es `eas build --platform android --profile preview`.
+Para instalar una APK release, necesitas recibirla de quien haya generado el build o descargarla desde un build de EAS al que tengas acceso. Si necesitas generar una nueva, el perfil `preview` está definido en [eas.json](object-counter-app/eas.json). Con EAS CLI instalado y una cuenta con acceso al proyecto, ejecuta desde la carpeta móvil `object-counter-app/`:
 
-El trabajo experimental de monitores está en `feature/dataset-feedback`. Véanse `docs/entrenamiento.md` y `docs/resultado-entrenamiento-monitores.md`; los pesos experimentales viven en el backend, no dentro de esta APK antigua.
+```powershell
+eas build --platform android --profile preview
+```
 
-La ampliación monitor + mouse conserva los experimentos anteriores y usa datasets versionados en `media-entrenamiento/experimento-aula-v1/` y `experimento-aula-v2/`. Véase [cómo se guarda y continúa el aprendizaje](docs/como-se-guarda-el-aprendizaje.md). Las fotos y ejecuciones intermedias están ignoradas por Git; sus copias locales verificadas están en `media-entrenamiento/backups/` y requieren copia a otra unidad para protegerse de la pérdida del disco. Solo los checkpoints de inferencia seleccionados se incluyen en `backend/models/`.
+Al terminar, descarga el artefacto desde el enlace del build. El perfil solicita `buildType: apk` y selecciona `android/app/build/outputs/apk/release/app-release.apk`; esa ruta corresponde a la salida de compilación, no a un archivo incluido en Git. No se ejecutó un nuevo build de EAS para comprobar esa entrega remota.
 
-## Alcance de las tres ramas
+Si recibes un `.tar.gz`, extrae su contenido y busca el `.apk`; cambiar la extensión del comprimido no lo convierte en una APK. La APK recuperada durante las pruebas fue un archivo local, no una descarga publicada en este repositorio.
 
-Estado verificado en GitHub el 24 de septiembre de 2026:
+## Modelos incluidos y datos privados de entrenamiento
+
+Los cambios de entrenamiento de `feature/dataset-feedback` ya están integrados en `main`. Los modelos seleccionados están en `backend/models/` y sí se descargan al clonar; contienen lo aprendido para ejecutar el conteo sin disponer de las fotos originales. Se ejecutan en el backend, no dentro de la APK.
+
+Los datasets tienen versiones locales bajo `media-entrenamiento/`, pero **esa carpeta completa está ignorada por Git**. Ni las imágenes, ni los videos, ni los experimentos, ni las copias locales de `media-entrenamiento/backups/` se distribuyen al clonar. Para continuar esos experimentos con los mismos datos se necesita obtener una copia privada por separado; para ejecutar la app no hace falta.
+
+El repositorio sí incluye las herramientas de `training/`, el registro de modelos, los informes seleccionados y la documentación. Véanse [cómo se guarda y continúa el aprendizaje](docs/como-se-guarda-el-aprendizaje.md) y [los resultados de monitores, mouse y teclados](docs/resultado-entrenamiento-teclado.md). Las copias privadas requieren respaldo en otra unidad para protegerse de la pérdida del disco.
+
+## Historial de ramas
+
+Para clonar y ejecutar la versión integrada, utiliza `main`, que también incluye los modelos personalizados de monitor, mouse y teclado. La siguiente tabla conserva el estado histórico documentado el 24 de septiembre de 2026, anterior a esa integración de entrenamiento; no es un inventario actual de todas las ramas:
 
 | Rama | Hasta dónde llega |
 | --- | --- |
-| `main` | Versión integrada actual: conteo por foto y por recorrido con memoria de IDs, reportes, configuración de conexión, interfaz unificada y limpieza del repositorio. Equipos informáticos pendientes de validación real. |
-| `feature/arcore-native-counting` | En GitHub permanece en `02fa286`: avances experimentales de ARCore nativo, anteriores a las correcciones finales del recorrido y la interfaz. No es la versión más reciente para ejecutar la app. |
+| `main` | Versión integrada a esa fecha: conteo por foto y por recorrido con memoria de IDs, reportes, configuración de conexión, interfaz unificada y limpieza del repositorio. Equipos informáticos pendientes de validación real. |
+| `feature/arcore-native-counting` | En GitHub estaba en `02fa286`: avances experimentales de ARCore nativo, anteriores a las correcciones finales del recorrido y la interfaz. No es la versión más reciente para ejecutar la app. |
 | `respaldo/main-antes-conteo-20260924` | Copia de main en `5150321`, anterior a la integración: conteo por foto y conteo de objetos visibles, reportes y configuración de IP; sin la nueva memoria del recorrido fuera del encuadre. |
 
 La rama local `feature/arcore-native-counting` llegó hasta `291568a` y ese trabajo ya se integró en `main`; su copia remota no se actualizó. Para continuar con la versión actual, utiliza `main`.
