@@ -12,6 +12,7 @@ Aplicación móvil Android construida con Expo SDK 55 y React Native. Permite co
 
 ```text
 backend/             API FastAPI, detección y seguimiento
+training/            lanzador del backend y herramientas de entrenamiento
 object-counter-app/  aplicación Expo/React Native
 ```
 
@@ -19,16 +20,18 @@ Los checkpoints personalizados necesarios para inferencia se versionan bajo `bac
 
 ## Requisitos
 
-### Generales
+### Para ejecutar el backend y usar una APK instalada
 
 - Git.
-- Conexión a Internet durante la preparación inicial para descargar paquetes, Gradle y pesos de los modelos.
-- Node.js **20.19.x** con npm. El proyecto usa Expo SDK **55**; evita Node 24 para este proyecto.
+- Conexión a Internet durante la preparación inicial para descargar paquetes y pesos de los modelos.
 - Python **3.10 a 3.12**.
-- Espacio disponible para dependencias, SDK de Android y modelos de IA.
+- Espacio disponible para dependencias y modelos de IA.
+- Teléfono Android con la APK instalada y acceso a la red local del computador.
 
-### Android
+### Adicionales para compilar la app Android
 
+- Node.js **20.19.x** con npm. El proyecto usa Expo SDK **55**; evita Node 24 para este proyecto.
+- Internet y espacio disponible para descargar Gradle y el SDK de Android.
 - Android Studio con Android SDK Platform, Build-Tools, Platform-Tools (`adb`) y Command-line Tools.
 - JDK 17. Puede usarse el JDK incluido con Android Studio.
 - Variables de Android configuradas (`ANDROID_HOME` o `ANDROID_SDK_ROOT`) y `platform-tools` disponible en `PATH`.
@@ -37,185 +40,88 @@ Los checkpoints personalizados necesarios para inferencia se versionan bajo `bac
 
 La aplicación contiene módulos nativos, por lo que debe construirse con `expo run:android`. No se debe usar Expo Go y se recomienda un dispositivo físico. La integración usa el módulo ARCore nativo existente, sin reintroducir Viro. No se necesita generar un modelo ONNX para contar.
 
-## Instalación en una máquina limpia
+## Instalación y puesta en marcha
 
-Los comandos principales están escritos para Windows PowerShell. Al final de cada sección se indican las diferencias para macOS/Linux.
+Sigue estos pasos en orden. Los comandos principales son para Windows PowerShell y parten de la raíz del repositorio. Si ya tienes la APK instalada, omite el paso 3: para usar los modelos nuevos basta con iniciar el backend y conectar la app.
 
-### 1. Clonar y entrar al repositorio
+### 1. Clonar el repositorio
 
 ```powershell
-git clone URL_DEL_REPOSITORIO
+git clone https://github.com/douglasparrales/object-counter-app.git
 cd object-counter-app
 ```
 
-Todos los comandos siguientes parten de la raíz, donde se encuentran `backend/` y `object-counter-app/`.
+Esta es la raíz: contiene `backend/`, `training/` y otra carpeta `object-counter-app/` con el código móvil. Si ya tienes el repositorio, abre PowerShell en esa raíz; no lo clones otra vez.
 
-### 2. Preparar el backend
+### 2. Instalar las dependencias del backend
 
-En PowerShell:
+Comprueba que tu Python sea una versión de **3.10 a 3.12**:
 
 ```powershell
-cd backend
-py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt -c constraints-inference.txt
-cd ..
+python --version
 ```
 
-Si `py -3.12` no está disponible, usa `python -m venv .venv` con una versión compatible.
+La ruta principal de esta guía usa Python sin entorno virtual. Si prefieres aislar las dependencias, prepara primero el entorno de la alternativa siguiente; después continúa con el mismo comando de instalación.
 
-Si PowerShell impide activar scripts, no es necesario cambiar permanentemente la política del sistema. Se pueden ejecutar los comandos con el Python del entorno:
+<details>
+<summary>Opcional: preparar un entorno virtual</summary>
+
+Desde la raíz, en PowerShell:
 
 ```powershell
-.\backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt -c backend\constraints-inference.txt
+python -m venv backend/.venv
+.\backend\.venv\Scripts\Activate.ps1
 ```
 
 En macOS/Linux:
 
 ```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt -c constraints-inference.txt
-cd ..
+python3 -m venv backend/.venv
+source backend/.venv/bin/activate
 ```
 
-#### Pesos usados por el backend
+Mantén ese entorno activado para los pasos 2 y 4. Si PowerShell bloquea la activación, sustituye `python` en ambos pasos por `.\backend\.venv\Scripts\python.exe`; no necesitas cambiar la política del sistema.
 
-El repositorio no incluye `yolov8s-worldv2.pt` ni `yolov8n.pt`. Ultralytics los descarga automáticamente la primera vez que se inicia el backend. Esa primera carga puede tardar y necesita Internet; después quedarán en `backend/` para reutilizarse.
+</details>
 
-Si se trabaja sin Internet, ambos archivos deben colocarse previamente dentro de `backend/` con esos nombres exactos.
-
-Los pesos personalizados incluidos en `backend/models/` ya contienen el aprendizaje; no es necesario descargar `media-entrenamiento/` ni entrenar de nuevo para usarlos. Desde la raíz, con el entorno del backend activado:
-
-```powershell
-python training/serve_backend.py --profile aula --host 0.0.0.0 --port 8000
-```
-
-`aula` es el perfil predeterminado del lanzador: escribir `--profile aula` u omitirlo produce exactamente la misma configuración, modelos y comportamiento de conteo. Habilita los detectores personalizados de monitor, mouse y teclado, y conserva el reconocimiento original para los demás objetos en el mismo servidor. No necesitas cambiar de perfil ni reiniciar el servidor según el objeto que quieras contar. Para mouse combina el modelo nuevo con el anterior y descarta cajas repetidas; monitor conserva el anterior y teclado usa el nuevo. `--profile aula-anterior` conserva el detector previo de monitor + mouse; `--profile monitores` conserva monitores v3; `--profile original` activa las rutas originales. `--check` verifica todos los checkpoints del perfil sin iniciar el servidor.
-
-En la app escribe **monitor**, **mouse** o **teclado**, nunca aula. Si ya tienes la APK instalada, basta actualizar e iniciar este backend y configurar su dirección: no necesitas compilar ni reinstalar la app. Las secciones de Android siguientes son para quien necesite generar una APK.
-
-Son perfiles experimentales, con resultados y límites publicados en [entrenamiento de teclados](docs/resultado-entrenamiento-teclado.md). El flujo de foto y el barrido usan los mismos detectores; acertar estas imágenes conocidas no garantiza reconocer todo en una clase nueva. El lanzador usa el Python activo y los pesos incluidos, sin depender del dataset privado ni de rutas del autor. Ejecutar `uvicorn main:app` directamente sin configurar variables conserva el comportamiento original: usa el lanzador para activar el entrenamiento.
-
-Para entender cómo se elige entre YOLOv8n, World y los personalizados, consulta [flujo de detección y datasets](docs/flujo-deteccion.md).
-
-### 3. Configurar la dirección del backend
-
-El teléfono y el computador deben estar en la misma red local. No uses `localhost` ni `127.0.0.1`: desde el teléfono apuntan al propio teléfono.
-
-En Windows, consulta la IPv4 del adaptador Wi-Fi o Ethernet activo:
-
-```powershell
-ipconfig
-```
-
-En la app abre el menú, entra a la configuración del backend y escribe esa IPv4, por ejemplo `192.168.1.3`. La app agrega automáticamente `http://` y el puerto `8000`, guarda la dirección en el teléfono y la reutiliza en los siguientes inicios. También puedes escribir una URL completa con otro puerto.
-
-Después de iniciar el backend, usa **Probar conexión** en la app. No es necesario volver a generar la APK cuando cambia la IP.
-
-Opcionalmente, `EXPO_PUBLIC_BACKEND_URL` permite definir una dirección inicial durante el build, pero la dirección guardada desde la app siempre tiene prioridad.
-
-La dirección guardada en el teléfono tiene prioridad sobre la variable de entorno. Cada sesión de conteo conserva el servidor con el que empezó.
-
-Existe una IP predeterminada de desarrollo en el código, pero no debe suponerse válida en otra máquina; revisa la dirección en **Conexión al servidor**.
-
-
-### 4. Instalar las dependencias de la app
-
-Desde la raíz:
-
-```powershell
-cd object-counter-app
-npm ci
-```
-
-Se usa `npm ci` porque el repositorio incluye `package-lock.json`. Usa `npm install` únicamente cuando se pretenda actualizar dependencias y el archivo lock.
-
-### 5. Preparar el dispositivo Android
-
-1. Abre Android Studio al menos una vez y completa la instalación del SDK solicitado.
-2. Acepta las licencias del SDK desde Android Studio.
-3. En el teléfono, activa **Opciones de desarrollador** y **Depuración USB**.
-4. Conecta el teléfono por USB y acepta la autorización de depuración.
-5. Comprueba la conexión:
-
-```powershell
-adb devices
-```
-
-El dispositivo debe aparecer con estado `device`, no `unauthorized` ni `offline`. Si hay varios dispositivos o emuladores, deja sólo el que usarás o selecciónalo cuando Expo lo solicite.
-
-### 6. Iniciar el backend
-
-Abre una terminal en la raíz del repositorio.
-
-Con el entorno activado:
-
-```powershell
-cd backend
-.\.venv\Scripts\Activate.ps1
-cd ..
-python training/serve_backend.py --profile aula --host 0.0.0.0 --port 8000
-```
-
-Usando el entorno virtual sin activarlo:
-
-```powershell
-.\backend\.venv\Scripts\python.exe training/serve_backend.py --profile aula --host 0.0.0.0 --port 8000
-```
-
-Sin utilizar un entorno virtual, desde la raíz del repositorio, instala las dependencias en tu Python global la primera vez (o cuando cambien):
+Instala las dependencias una sola vez, o cuando cambien sus archivos:
 
 ```powershell
 python -m pip install -r backend/requirements.txt -c backend/constraints-inference.txt
 ```
 
-Después, cada vez que quieras encender el servidor, ejecuta desde esa misma raíz:
+`requirements.txt` indica las librerías necesarias y `constraints-inference.txt` fija las versiones verificadas. En macOS/Linux sin entorno virtual, usa `python3` en lugar de `python`.
+
+### 3. Compilar e instalar la app, solo si necesitas un build de desarrollo
+
+**Si ya tienes la APK instalada, pasa directamente al paso 4.** Este paso requiere Node.js, Android Studio, JDK 17 y las herramientas Android indicadas en los requisitos. Genera un build de desarrollo que usa Metro; no es una APK release independiente.
+
+Abre Android Studio y completa la instalación del SDK y sus licencias. En el teléfono, activa **Opciones de desarrollador** y **Depuración USB**, conecta el cable y acepta la autorización. Comprueba la conexión:
 
 ```powershell
-python training/serve_backend.py --host 0.0.0.0 --port 8000
+adb devices
 ```
 
-Omitir `--profile aula` en este comando equivale exactamente a incluirlo, porque `aula` es el valor predeterminado. No necesitas repetir la instalación de dependencias en cada arranque.
+El dispositivo debe aparecer como `device`. Si aparece `unauthorized`, desbloquea el teléfono y acepta la huella RSA. Si hay varios dispositivos, selecciona el deseado cuando Expo lo solicite.
 
-En macOS/Linux:
-
-```bash
-cd backend
-source .venv/bin/activate
-cd ..
-python training/serve_backend.py --profile aula --host 0.0.0.0 --port 8000
-```
-
-El lanzador entra internamente a `backend` y arranca Uvicorn con los modelos configurados; por eso se ejecuta desde la raíz y no necesitas iniciar otro Uvicorn aparte. Deja la terminal abierta mientras usas la APK. Los otros perfiles sirven para comparar versiones o volver al comportamiento anterior; no son necesarios para cambiar de objeto. Puedes desconectar el USB y usar la APK por Wi-Fi si el teléfono y el computador están en la misma red y la app tiene configurada la IP del computador. En el computador se puede comprobar FastAPI en:
-
-```text
-http://127.0.0.1:8000/docs
-```
-
-Desde otro dispositivo de la red debe ser accesible mediante:
-
-```text
-http://IP_DEL_COMPUTADOR:8000/docs
-```
-
-Si Windows muestra una solicitud del firewall, permite Python/Uvicorn en redes privadas. No expongas el puerto en redes públicas.
-
-### 7. Compilar e instalar la app Android
-
-Con el backend ejecutándose, abre otra terminal:
+Abre una segunda terminal en la raíz y ejecuta:
 
 ```powershell
 cd object-counter-app
+npm ci
 npx expo run:android
 ```
 
+`npm ci` instala las versiones de `package-lock.json`. Deja esta terminal abierta mientras utilizas el build de desarrollo; la primera terminal sigue en la raíz para iniciar el backend.
+
 En una máquina limpia, Expo generará la carpeta nativa `android/`, ejecutará Gradle e instalará el development build. La primera compilación tarda más porque descarga dependencias nativas.
 
-Acepta el permiso de cámara cuando la aplicación lo solicite. Si cambias configuraciones nativas, plugins, iconos o el modelo AR, vuelve a ejecutar `npx expo run:android`; una recarga de Metro no aplica esos cambios al binario instalado.
+Acepta el permiso de cámara cuando la aplicación lo solicite.
+
+<details>
+<summary>Si actualizas un proyecto nativo que ya existía</summary>
+
+Si cambias configuraciones nativas, plugins, iconos o el modelo AR, vuelve a ejecutar `npx expo run:android`; una recarga de Metro no aplica esos cambios al binario instalado.
 
 Si `object-counter-app/android/` ya existía antes de cambiar de rama o antes de modificar `plugins/native-arcore`, regenera primero el proyecto nativo para que Expo copie y registre el módulo actualizado:
 
@@ -225,6 +131,61 @@ npx expo run:android
 ```
 
 La carpeta `android/` es generada y está ignorada por Git. El plugin configura `syncNativeArCoreSources` para copiar las fuentes Kotlin antes de cada compilación. Al incorporar el plugin por primera vez sigue siendo necesario `prebuild`; las siguientes compilaciones sincronizan AR aunque la carpeta Android ya exista.
+
+</details>
+
+### 4. Iniciar el backend
+
+En la terminal situada en la raíz del repositorio, ejecuta:
+
+```powershell
+python training/serve_backend.py --host 0.0.0.0 --port 8000
+```
+
+El lanzador configura los modelos, entra internamente a `backend` y arranca Uvicorn. No tienes que entrar a esa carpeta ni ejecutar otro Uvicorn. Espera a que aparezca `Application startup complete` y deja la terminal abierta mientras usas la app. Puedes comprobar el servidor en `http://127.0.0.1:8000/docs` desde el computador.
+
+Si Windows solicita permiso de firewall, permite Python/Uvicorn en redes privadas. No expongas el puerto en redes públicas.
+
+<details>
+<summary>Qué modelos carga este comando y qué significa el perfil aula</summary>
+
+El repositorio no incluye `yolov8s-worldv2.pt` ni `yolov8n.pt`. Ultralytics los descarga automáticamente la primera vez que se inicia el backend. Esa primera carga puede tardar y necesita Internet; después quedarán en `backend/` para reutilizarse.
+
+Si se trabaja sin Internet, ambos archivos deben colocarse previamente dentro de `backend/` con esos nombres exactos.
+
+Los pesos personalizados incluidos en `backend/models/` ya contienen el aprendizaje; no es necesario descargar `media-entrenamiento/` ni entrenar de nuevo para usarlos.
+
+`aula` es el perfil predeterminado del lanzador: escribir `--profile aula` u omitirlo produce exactamente la misma configuración, modelos y comportamiento de conteo. Habilita los detectores personalizados de monitor, mouse y teclado, y conserva el reconocimiento original para los demás objetos en el mismo servidor. No necesitas cambiar de perfil ni reiniciar el servidor según el objeto que quieras contar. Para mouse combina el modelo nuevo con el anterior y descarta cajas repetidas; monitor conserva el anterior y teclado usa el nuevo. `--profile aula-anterior` conserva el detector previo de monitor + mouse; `--profile monitores` conserva monitores v3; `--profile original` activa las rutas originales. `--check` verifica todos los checkpoints del perfil sin iniciar el servidor.
+
+En la app escribe **monitor**, **mouse** o **teclado**, nunca aula.
+
+Son perfiles experimentales, con resultados y límites publicados en [entrenamiento de teclados](docs/resultado-entrenamiento-teclado.md). El flujo de foto y el barrido usan los mismos detectores; acertar estas imágenes conocidas no garantiza reconocer todo en una clase nueva. El lanzador usa el Python activo y los pesos incluidos, sin depender del dataset privado ni de rutas del autor. Ejecutar `uvicorn main:app` directamente sin configurar variables conserva el comportamiento original: usa el lanzador para activar el entrenamiento.
+
+Para entender cómo se elige entre YOLOv8n, World y los personalizados, consulta [flujo de detección y datasets](docs/flujo-deteccion.md).
+
+</details>
+
+### 5. Conectar la APK al servidor
+
+Conecta el teléfono y el computador a la misma red local. Con una APK release instalada puedes desconectar el USB y usar Wi-Fi.
+
+En otra terminal de Windows, consulta la dirección IPv4 del adaptador Wi-Fi o Ethernet activo:
+
+```powershell
+ipconfig
+```
+
+En macOS/Linux, consulta la IP local en la configuración de red del sistema.
+
+Abre la app, entra en **Conexión al servidor** desde el menú y escribe esa IPv4, por ejemplo `192.168.1.3`. La app añade `http://` y el puerto `8000`; también acepta una URL completa con otro puerto. No uses `localhost`, `127.0.0.1` ni `0.0.0.0` como dirección en el teléfono: necesitas la IP del computador.
+
+Pulsa **Probar conexión**. Si conecta, ya puedes contar. Si falla, comprueba desde el navegador del teléfono `http://IP_DEL_COMPUTADOR:8000/docs` y revisa la sección de solución de problemas.
+
+La app guarda la dirección entre reinicios. Si cambia la IP del computador, actualízala aquí; no hace falta generar otra APK. La dirección guardada tiene prioridad sobre `EXPO_PUBLIC_BACKEND_URL`, que opcionalmente define una dirección inicial durante el build. Cada sesión de conteo conserva el servidor con el que empezó. La IP de desarrollo incluida en el código puede no corresponder a tu máquina.
+
+### Para volver a usar la app otro día
+
+Abre una terminal en la raíz y repite únicamente el paso 4 (activa antes el entorno si elegiste usarlo). Después abre la APK y comprueba la conexión del paso 5. No repitas la instalación de dependencias, el entrenamiento ni la compilación, salvo que los cambios del proyecto lo requieran. Si usas un build de desarrollo, inicia también Metro con `npm start` desde la carpeta móvil `object-counter-app/`.
 
 ## Uso actual
 
