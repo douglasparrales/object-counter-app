@@ -1,0 +1,10 @@
+# Versions used for the custom checkpoints and API verification.
+fastapi==0.142.2
+uvicorn==0.54.0
+python-multipart==0.0.32
+torch==2.12.1
+torchvision==0.27.1
+ultralytics==8.4.75
+pillow==12.2.0
+deep-translator==1.11.4
+numpy==2.1.3

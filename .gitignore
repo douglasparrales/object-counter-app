@@ -1,4 +1,6 @@
 # Logs
+/media-entrenamiento/
+/artifacts/
 /analysis/
 /docs/diagnostico.md
 /docs/main-integration.md
@@ -165,6 +167,9 @@ backend/__pycache__
 # model files pesados
 yolov8n_saved_model/
 *.pt
+# Small inference checkpoints needed by a fresh clone (not training runs).
+!/backend/models/monitor-v3.pt
+!/backend/models/classroom.pt
 *.onnx
 backend/mobileclip2_b.ts
 calibration_image_sample*

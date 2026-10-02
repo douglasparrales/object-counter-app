@@ -47,6 +47,34 @@ class SurfaceScanTests(unittest.TestCase):
         self.assertEqual(self.scan.process(Image.fromarray(self.scene[:, :700]), [], 0), first)
         self.assertEqual(self.scan.total, 0)
 
+    def test_partial_monitor_needs_three_frames_and_keeps_id_when_fully_visible(self):
+        scan = SurfaceScan('monitor', allow_partial=True)
+        clipped = [dict(cx=650/700, cy=.5, w=100/700, h=.20)]
+        first_view = Image.fromarray(self.scene[:, :700])
+        for sequence, total in [(0,0), (1,0), (2,1)]:
+            self.assertEqual(scan.process(first_view, clipped, sequence)['total'], total)
+        # Moving the camera reveals the rest of that same stationary monitor.
+        next_view = Image.fromarray(self.scene[:, 150:850])
+        full = [dict(cx=525/700, cy=.5, w=150/700, h=.20)]
+        for sequence in (3,4):
+            result = scan.process(next_view, full, sequence)
+            self.assertEqual(result['estado'], 'SIGUIENDO')
+            self.assertEqual(result['total'], 1)
+            self.assertEqual(result['objetos'][0]['id'], 1)
+
+    def test_partial_confirmation_resets_on_gap_and_does_not_change_default(self):
+        image = Image.fromarray(self.scene[:, :700])
+        clipped = [dict(cx=650/700, cy=.5, w=100/700, h=.20)]
+        default = SurfaceScan('original')
+        for sequence in range(4):
+            self.assertEqual(default.process(image, clipped, sequence)['total'], 0)
+        scan = SurfaceScan('monitor', allow_partial=True)
+        scan.process(image, clipped, 0)
+        self.assertEqual(scan.process(image, clipped, 0)['total'], 0)
+        scan.process(image, [], 1)
+        for sequence, total in [(2,0), (3,0), (4,1)]:
+            self.assertEqual(scan.process(image, clipped, sequence)['total'], total)
+
     def test_two_adjacent_objects_remain_distinct(self):
         self.frame(0, [200, 230])
         result = self.frame(0, [200, 230])

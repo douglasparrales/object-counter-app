@@ -21,10 +21,12 @@ class Landmark:
     footprint: np.ndarray
     hits: int = 1
     id: int = 0
+    required_hits: int = 2
+    last_sequence: int = -1
 
 
 class SurfaceScan:
-    def __init__(self, reference):
+    def __init__(self, reference, allow_partial=False):
         self.reference = reference
         self.lock = Lock()
         self.updated = time.monotonic()
@@ -36,6 +38,7 @@ class SurfaceScan:
         self.landmarks = []
         self.total = 0
         self.appearance_tracking = False
+        self.allow_partial = allow_partial
 
     def use_appearance(self, has_candidates):
         # Once the reference's appearance has worked, an empty frame means
@@ -114,7 +117,7 @@ class SurfaceScan:
                 used = set()
                 for o in objects:
                     full = min(o['cx']-o['w']/2, o['cy']-o['h']/2) > 0.015 and max(o['cx']+o['w']/2, o['cy']+o['h']/2) < 0.985
-                    if not full:
+                    if not full and not self.allow_partial:
                         boxes.append({**o, 'id': 0, 'confirmado': False})
                         continue
                     x, y, bw, bh = o['cx']*w, o['cy']*h, o['w']*w, o['h']*h
@@ -149,13 +152,20 @@ class SurfaceScan:
                     if nearby:
                         _, _, idx = nearby[0]
                         landmark = self.landmarks[idx]
-                        landmark.hits += 1
+                        # Experimental monitors at an image edge need three
+                        # consecutive registered observations. A missing frame
+                        # resets tentative evidence, but never a confirmed ID.
+                        if not landmark.id and landmark.required_hits > 2 and landmark.last_sequence != sequence - 1:
+                            landmark.hits = 1
+                        else:
+                            landmark.hits += 1
                     else:
                         idx = len(self.landmarks)
-                        landmark = Landmark(center, radius, footprint)
+                        landmark = Landmark(center, radius, footprint, required_hits=2 if full else 3)
                         self.landmarks.append(landmark)
                     used.add(idx)
-                    if landmark.hits >= 2 and not landmark.id:
+                    landmark.last_sequence = sequence
+                    if landmark.hits >= landmark.required_hits and not landmark.id:
                         self.total += 1
                         landmark.id = self.total
                     boxes.append({**o, 'id': landmark.id, 'confirmado': landmark.id > 0})

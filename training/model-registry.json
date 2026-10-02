@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "updated": "2026-10-01",
+  "default_changed": false,
+  "models": [
+    {
+      "id": "coco-original",
+      "path": "backend/yolov8n.pt",
+      "sha256": "f59b3d833e2ff32e194b5bb8e08d211dc7c5bdf144b90d2c8412c47ccfc83b36",
+      "status": "original-preserved"
+    },
+    {
+      "id": "monitor-cpu-v3",
+      "path": "media-entrenamiento/experimento-monitor/runs/monitor-cpu-v3/weights/best.pt",
+      "sha256": "857e5abea4e8f208799757ddf1cd757400d5faf9a7fe38a01c01d4cafe3b9f6f",
+      "status": "previous-experiment-preserved",
+      "distributed_path": "backend/models/monitor-v3.pt"
+    },
+    {
+      "id": "aula-cpu-v2",
+      "path": "media-entrenamiento/experimento-aula-v1/runs/aula-cpu-v2/weights/best.pt",
+      "sha256": "8dd67c284b72aa1800fc0e1dcea421a2c8b5b76c247e61c8f3edcc722e782f9f",
+      "status": "rejected-mouse-learning"
+    },
+    {
+      "id": "aula-cpu-v3",
+      "path": "media-entrenamiento/experimento-aula-v1/runs/aula-cpu-v3/weights/best.pt",
+      "sha256": "ab1a241341cf280671abb4e96569660bc76c3d39920ba5954b34c89f2556a254",
+      "status": "experimental-not-promoted"
+    },
+    {
+      "id": "aula-mouse-v4",
+      "path": "backend/models/classroom.pt",
+      "sha256": "84a8e8537b05d7cec365f04fcc2facd9b68ddc1cad144cfeacea1621683e6b8e",
+      "status": "experimental-included-for-cloning"
+    }
+  ],
+  "candidate_evaluation": "media-entrenamiento/experimento-aula-v2/candidate-v4/evaluation.json",
+  "candidate_api_results": "media-entrenamiento/experimento-aula-v2/api-v4/results.json",
+  "continuity": "docs/como-se-guarda-el-aprendizaje.md",
+  "limitation": "Selected inference weights are tracked under backend/models; private datasets and intermediate checkpoints remain gitignored."
+}

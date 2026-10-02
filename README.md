@@ -15,7 +15,7 @@ backend/             API FastAPI, detección y seguimiento
 object-counter-app/  aplicación Expo/React Native
 ```
 
-Los pesos de YOLO (`*.pt`), los entornos virtuales, `node_modules/` y las carpetas nativas generadas no se versionan. En una máquina limpia deben descargarse o generarse siguiendo esta guía.
+Los checkpoints personalizados necesarios para inferencia se versionan bajo `backend/models/`, con sus hashes y perfiles. Los pesos generales originales se descargan al primer inicio. Las fotos privadas, ejecuciones intermedias, entornos virtuales, `node_modules/` y carpetas nativas generadas no se versionan.
 
 ## Requisitos
 
@@ -59,7 +59,7 @@ cd backend
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+python -m pip install -r requirements.txt -c constraints-inference.txt
 cd ..
 ```
 
@@ -68,7 +68,7 @@ Si `py -3.12` no está disponible, usa `python -m venv .venv` con una versión c
 Si PowerShell impide activar scripts, no es necesario cambiar permanentemente la política del sistema. Se pueden ejecutar los comandos con el Python del entorno:
 
 ```powershell
-.\backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+.\backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt -c backend\constraints-inference.txt
 ```
 
 En macOS/Linux:
@@ -78,7 +78,7 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+python -m pip install -r requirements.txt -c constraints-inference.txt
 cd ..
 ```
 
@@ -87,6 +87,16 @@ cd ..
 El repositorio no incluye `yolov8s-worldv2.pt` ni `yolov8n.pt`. Ultralytics los descarga automáticamente la primera vez que se inicia el backend. Esa primera carga puede tardar y necesita Internet; después quedarán en `backend/` para reutilizarse.
 
 Si se trabaja sin Internet, ambos archivos deben colocarse previamente dentro de `backend/` con esos nombres exactos.
+
+Los pesos personalizados incluidos en `backend/models/` ya contienen el aprendizaje; no es necesario descargar `media-entrenamiento/` ni entrenar de nuevo para usarlos. Desde la raíz, con el entorno del backend activado:
+
+```powershell
+python training/serve_backend.py --profile monitores --host 0.0.0.0 --port 8000
+```
+
+`--profile original` conserva las rutas originales; `--profile aula` selecciona el candidato conjunto monitor + mouse y sus umbrales guardados. Ambos perfiles personalizados son experimentales: consultar sus resultados antes de usarlos para conteos sin supervisión. `--check` verifica los pesos incluidos sin iniciar el servidor. El lanzador usa el Python actual, rutas relativas al repositorio y no depende del entorno local del autor.
+
+El perfil `monitores` conserva la versión anterior, y `aula` permite probar el entrenamiento ampliado sin sobrescribirla. Detener el servidor y arrancar el otro perfil cambia la versión; no hace falta reinstalar la APK. Para comprender cómo se elige entre YOLOv8n, World y los personalizados, véase [flujo de detección y datasets](docs/flujo-deteccion.md).
 
 ### 3. Configurar la dirección del backend
 
@@ -143,14 +153,14 @@ Con el entorno activado:
 ```powershell
 cd backend
 .\.venv\Scripts\Activate.ps1
-python -m uvicorn main:app --host 0.0.0.0 --port 8000
+cd ..
+python training/serve_backend.py --profile monitores --host 0.0.0.0 --port 8000
 ```
 
 Sin activar el entorno:
 
 ```powershell
-cd backend
-.\.venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000
+.\backend\.venv\Scripts\python.exe training/serve_backend.py --profile monitores --host 0.0.0.0 --port 8000
 ```
 
 En macOS/Linux:
@@ -158,10 +168,11 @@ En macOS/Linux:
 ```bash
 cd backend
 source .venv/bin/activate
-python -m uvicorn main:app --host 0.0.0.0 --port 8000
+cd ..
+python training/serve_backend.py --profile monitores --host 0.0.0.0 --port 8000
 ```
 
-Es importante iniciar Uvicorn desde `backend/`, porque `main.py` carga los modelos por nombre relativo. En el computador se puede comprobar FastAPI en:
+El lanzador establece el directorio correcto del backend. Cambia `monitores` por `aula` para probar el candidato conjunto o por `original` para las rutas anteriores. En el computador se puede comprobar FastAPI en:
 
 ```text
 http://127.0.0.1:8000/docs
@@ -271,6 +282,16 @@ SQLite almacena las sesiones guardadas, resultados y eventos de auditoría. Las 
 ## Para pasar a producción
 
 La app necesita validar precisión con equipos reales y distintas condiciones, mejorar el seguimiento entre profundidades, desplegar un backend seguro y estable, definir respaldo y privacidad de los datos y completar pruebas de rendimiento, recuperación de errores y distribución firmada.
+
+## APK recuperada y perfil de instalación directa
+
+La APK release del artefacto local del 25 de septiembre de 2026 está en `artifacts/release/app-release.apk`. El archivo `artifacts/preview-96c14d04.tar.gz` contiene esa APK y una de depuración; no se debe renombrar `.gz` a `.apk`. Ambas son archivos distintos dentro del contenedor. La APK release fue verificada e instalada por USB.
+
+El perfil `preview` de `object-counter-app/eas.json` ahora solicita `buildType: apk` y limita `applicationArchivePath` a `android/app/build/outputs/apk/release/app-release.apk`, para seleccionar únicamente ese archivo en futuros builds. No se ejecutó un nuevo build de EAS para comprobar esa entrega remota. Desde `object-counter-app/`, el comando del perfil es `eas build --platform android --profile preview`.
+
+El trabajo experimental de monitores está en `feature/dataset-feedback`. Véanse `docs/entrenamiento.md` y `docs/resultado-entrenamiento-monitores.md`; los pesos experimentales viven en el backend, no dentro de esta APK antigua.
+
+La ampliación monitor + mouse conserva los experimentos anteriores y usa datasets versionados en `media-entrenamiento/experimento-aula-v1/` y `experimento-aula-v2/`. Véase [cómo se guarda y continúa el aprendizaje](docs/como-se-guarda-el-aprendizaje.md). Las fotos y ejecuciones intermedias están ignoradas por Git; sus copias locales verificadas están en `media-entrenamiento/backups/` y requieren copia a otra unidad para protegerse de la pérdida del disco. Solo los checkpoints de inferencia seleccionados se incluyen en `backend/models/`.
 
 ## Alcance de las tres ramas
 

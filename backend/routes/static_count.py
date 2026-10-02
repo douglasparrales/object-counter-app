@@ -6,9 +6,10 @@ from fastapi.concurrency import run_in_threadpool
 from PIL import Image, ImageOps
 
 from services.static_counter import StaticImageCounter
+from services.monitor_counter import is_monitor_target
 
 
-def crear_router(contador: StaticImageCounter) -> APIRouter:
+def crear_router(contador: StaticImageCounter, contador_monitor=None, contador_aula=None) -> APIRouter:
     router = APIRouter(tags=["conteo-estatico"])
 
     @router.post("/count-image")
@@ -48,7 +49,10 @@ def crear_router(contador: StaticImageCounter) -> APIRouter:
                     or any(valor < 0 or valor > 1 for valor in seleccion)
                 ):
                     raise HTTPException(status_code=400, detail="La selección visual no es válida.")
-            resultado = await run_in_threadpool(contador.contar, image, objetivo.strip(), seleccion)
+            activo = contador_monitor if contador_monitor is not None and is_monitor_target(objetivo) else contador
+            if contador_aula is not None and contador_aula.supports(objetivo):
+                activo = contador_aula
+            resultado = await run_in_threadpool(activo.contar, image, objetivo.strip(), seleccion)
             diagnostico = resultado["diagnostico"]
             print(
                 f"[count-image RESULTADO] Total: {resultado['total']} | "

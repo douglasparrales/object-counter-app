@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "profiles": {
+    "original": {
+      "kind": "original"
+    },
+    "monitores": {
+      "kind": "monitor",
+      "file": "monitor-v3.pt",
+      "sha256": "857e5abea4e8f208799757ddf1cd757400d5faf9a7fe38a01c01d4cafe3b9f6f",
+      "confidence": 0.7,
+      "status": "experimental; photo regression tests available"
+    },
+    "aula": {
+      "kind": "classroom",
+      "file": "classroom.pt",
+      "sha256": "84a8e8537b05d7cec365f04fcc2facd9b68ddc1cad144cfeacea1621683e6b8e",
+      "thresholds": {
+        "0": 0.7,
+        "1": 0.85
+      },
+      "imgsz": 640,
+      "nms_iou": 0.45,
+      "run": "aula-mouse-v4",
+      "dataset_version": "experimento-aula-v2",
+      "status": "experimental; known misses; not a general accuracy guarantee",
+      "report": "docs/resultado-mouse-ampliado.md"
+    }
+  }
+}

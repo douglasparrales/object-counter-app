@@ -6,9 +6,12 @@ from routes.static_count import crear_router as crear_router_conteo_estatico
 from services.static_counter import StaticImageCounter
 from services.surface_scan import SurfaceScan
 from services.detection_categories import device_category
+from services.monitor_counter import MonitorCounter, monitor_requested
+from services.classroom_counter import ClassroomCounter, classroom_target
 from services.visual_reference import crear_perfil_visual, detectar_por_perfil, detectar_por_perfil_ar
 from deep_translator import GoogleTranslator
 import io
+import os
 import json
 import time
 import traceback
@@ -49,6 +52,19 @@ print("--------------------------------------------------\n")
 # set_classes modifica el estado del modelo. El lock evita que dos peticiones
 # simultáneas usen las clases de otra petición.
 model_lock = Lock()
+# Opt-in only. Default startup and all unrelated categories keep existing paths.
+monitor_weights = os.environ.get('MONITOR_MODEL_PATH', '').strip()
+contador_monitor = MonitorCounter(
+    monitor_weights,
+    confidence=float(os.environ.get('MONITOR_CONFIDENCE', '0.7')),
+    imgsz=int(os.environ.get('MONITOR_IMGSZ', '640')),
+) if monitor_weights else None
+classroom_weights = os.environ.get('CLASSROOM_MODEL_PATH', '').strip()
+contador_aula = ClassroomCounter(
+    classroom_weights,
+    monitor_confidence=float(os.environ.get('CLASSROOM_MONITOR_CONFIDENCE', '0.7')),
+    mouse_confidence=float(os.environ.get('CLASSROOM_MOUSE_CONFIDENCE', '0.7')),
+) if classroom_weights else None
 clases_activas: tuple[str, ...] | None = None
 referencias_visuales: dict[str, dict] = {}
 traducciones_cache: dict[str, str] = {}
@@ -69,7 +85,10 @@ async def crear_recorrido(referencia_id: str = Query(...)):
         if len(recorridos) >= 16:
             raise HTTPException(503, 'Hay demasiados recorridos abiertos; espera y vuelve a intentar.')
         key = str(uuid.uuid4())
-        recorridos[key] = SurfaceScan(referencia_id)
+        allow_partial = contador_monitor is not None and monitor_requested('', referencias_visuales[referencia_id])
+        if contador_aula is not None and contador_aula.supports('', referencias_visuales[referencia_id]):
+            allow_partial = True
+        recorridos[key] = SurfaceScan(referencia_id, allow_partial=allow_partial)
     return {'sesion': key}
 
 
@@ -182,9 +201,10 @@ def similitud_visual(referencia: dict, candidato: Image.Image) -> float:
     return round(0.60 * similitud_color + 0.40 * similitud_orb, 3)
 
 
-def guardar_referencia_visual(image: Image.Image, caja: tuple[float, float, float, float] | None) -> str:
+def guardar_referencia_visual(image: Image.Image, caja: tuple[float, float, float, float] | None, objetivo: str = '') -> str:
     referencia_id = str(uuid.uuid4())
     referencias_visuales[referencia_id] = {
+        'objetivo_original': objetivo,
         "descriptor": crear_descriptor_visual(recortar_imagen(image, caja)),
         # Si YOLO no localizó la referencia, su foto incluye fondo además del
         # objeto: compararla contra una caja genera falsos negativos.
@@ -266,7 +286,7 @@ async def identify(
     # Una selección explícita es una referencia más fiable que intentar que
     # un vocabulario abierto reconozca primero objetos pequeños o regionalismos.
     if seleccion is not None:
-        referencia_id = guardar_referencia_visual(image, seleccion)
+        referencia_id = guardar_referencia_visual(image, seleccion, prompt_es)
         duracion = round(time.time() - t0, 3)
         clase_referencia = candidatos[0] if candidatos else (prompt_es or "objeto")
         print(f"✅ [/identify RESULTADO] Referencia visual seleccionada | Clase: '{clase_referencia}' | Tiempo: {duracion}s")
@@ -305,7 +325,7 @@ async def identify(
 
     # 5. Evaluación de resultados
     if not clase_detectada or mejor_conf < 0.10:
-        referencia_id = guardar_referencia_visual(image, seleccion)
+        referencia_id = guardar_referencia_visual(image, seleccion, prompt_es)
         print(f"⚠️ [/identify RESULTADO] Objeto '{prompt_es}' NO encontrado. Máxima confianza: {round(mejor_conf, 3)} | Tiempo: {duracion}s")
         return {
             "exito": False,
@@ -319,7 +339,7 @@ async def identify(
         }
 
     print(f"💡 [/identify RESULTADO] ÉXITO -> Detectado: '{clase_detectada}' con confianza {round(mejor_conf, 3)} | Tiempo: {duracion}s")
-    referencia_id = guardar_referencia_visual(image, seleccion or mejor_caja)
+    referencia_id = guardar_referencia_visual(image, seleccion or mejor_caja, prompt_es)
     return {
         "exito": True,
         "clase": clase_detectada,
@@ -384,7 +404,10 @@ async def detect(
     dispositivo = device_category(clase) if es_ar else None
     # Equipment is counted by category, including different colours/models.
     # A dark reference must not turn background patches into equipment.
-    if dispositivo:
+    usar_monitor = contador_monitor is not None and monitor_requested(clase, referencia_registro)
+    objetivo_aula = classroom_target(clase, referencia_registro) if contador_aula is not None else None
+    usar_aula = objetivo_aula is not None
+    if dispositivo or usar_monitor or usar_aula:
         perfil_apariencia = None
         usar_similitud = False
     detector_perfil = detectar_por_perfil_ar if es_ar else detectar_por_perfil
@@ -394,7 +417,11 @@ async def detect(
         # Una foto masiva conserva más detalle para objetos pequeños; el modo
         # tiempo real sigue siendo más rápido para la cámara en vivo.
         imgsz = 960 if modo == "foto_masiva" else 640
-        if dispositivo:
+        if usar_aula:
+            results = await run_in_threadpool(contador_aula.predict, image, objetivo_aula)
+        elif usar_monitor:
+            results = await run_in_threadpool(contador_monitor.predict, image)
+        elif dispositivo:
             results = await run_in_threadpool(inferir_dispositivo, image, dispositivo[0], imgsz)
         elif usar_apariencia:
             results = []
@@ -454,7 +481,8 @@ async def detect(
     objetos = []
     for candidato in candidatos_detectados:
         caja_candidata = candidato.pop("caja_px")
-        if any(iou_cajas(caja_candidata, existente["caja_px"]) >= 0.35 for existente in objetos):
+        # MonitorCounter already applies shared NMS for both photo and camera.
+        if not (usar_monitor or usar_aula) and any(iou_cajas(caja_candidata, existente["caja_px"]) >= 0.35 for existente in objetos):
             continue
         candidato["caja_px"] = caja_candidata
         objetos.append(candidato)
@@ -479,7 +507,7 @@ async def detect(
 
     # Imprime un resumen corto en una sola línea por cada frame
     duracion = round(time.time() - t0, 3)
-    ruta = "coco_dispositivo" if dispositivo else "apariencia" if usar_apariencia else "yolo"
+    ruta = "aula_experimental" if usar_aula else "monitor_experimental" if usar_monitor else "coco_dispositivo" if dispositivo else "apariencia" if usar_apariencia else "yolo"
     print(f"🔍 [/detect RESULTADO] Filtro: '{clase}' | Objetos: {len(objetos)} | Ruta: {ruta} | Tiempo: {duracion}s")
 
     respuesta = {"objetos": objetos}
@@ -530,4 +558,4 @@ def inferir_abierto_estatico(image: Image.Image, confianza: float, imgsz: int, o
 
 
 contador_estatico = StaticImageCounter(inferir_general_estatico, inferir_abierto_estatico)
-app.include_router(crear_router_conteo_estatico(contador_estatico))
+app.include_router(crear_router_conteo_estatico(contador_estatico, contador_monitor, contador_aula))
