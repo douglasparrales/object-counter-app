@@ -49,10 +49,19 @@ Todos estos archivos persisten al cerrar la app o apagar el servidor. Las refere
 5. Conservar el candidato anterior hasta demostrar que el nuevo sirve. No convertir predicciones automáticas en etiquetas verdaderas sin revisión.
 6. Archivar al terminar: `training/archive_experiment.py --experiment media-entrenamiento/experimento-aula-v1 --name aula-v1-recovery.zip` usando el Python del proyecto.
 
-**Actualización para distribución:** Git incluye ahora dos checkpoints seleccionados en `backend/models/`, junto con hashes, perfiles y el lanzador portable `training/serve_backend.py`. Las fotos y los checkpoints intermedios siguen ignorados. El dataset privado no se necesita para inferencia; sí para repetir exactamente el entrenamiento. Publicar la rama transporta los archivos versionados, y solo su futura integración los incorpora a main.
+**Actualización para distribución:** Git incluye ahora tres checkpoints seleccionados en `backend/models/`, junto con hashes, perfiles y el lanzador portable `training/serve_backend.py`. Las fotos y los checkpoints intermedios siguen ignorados. El dataset privado no se necesita para inferencia; sí para repetir exactamente el entrenamiento. Publicar la rama transporta los archivos versionados, y solo su futura integración los incorpora a main.
 
 Las copias ZIP verificadas permiten recuperar experimentos completos, pero están en el mismo disco. Para protegerse de pérdida de la laptop/disco hay que copiar también `media-entrenamiento/` o sus archivos de recuperación a otra unidad o almacenamiento elegido por el usuario. No se han subido imágenes a un servicio externo.
 
 Las escenas actuales están relacionadas entre sí. Las cinco fotos de mouse muestran dos tipos de ratón y no constituyen una prueba independiente de conteo de varios mouse. Se necesita una segunda revisión de etiquetas y capturas nuevas para evaluar generalización.
 
 Fuentes: [entrenamiento y checkpoints de Ultralytics](https://docs.ultralytics.com/modes/train/), [clases de COCO](https://docs.ultralytics.com/datasets/detect/coco/). La descripción de la integración proviene del código local.
+
+
+## Ampliación de teclados y nuevas versiones
+
+Las versiones de aula v3 y v4 añaden la clase `keyboard=2`, que en la app se solicita como `teclado`. Los IDs anteriores siguen siendo monitor=0 y mouse=1. `classes.json` permite que el script lea las clases de cada versión sin reinterpretar los datasets históricos de dos clases. El nombre aula agrupa el dominio del experimento, no sustituye el nombre de los objetos.
+
+Para continuar: crear otra carpeta de experimento, copiar las anotaciones previas y añadir/corregir las nuevas; mantener separados los grupos de captura; ejecutar prepare, train y evaluate con `--work` apuntando a esa nueva versión. Conservar el checkpoint de partida e incluir fotos anteriores evita entrenar únicamente con la última categoría, aunque no garantiza por sí solo que no haya regresiones. Comparar después todas las clases y probar el flujo HTTP antes de cambiar profiles.json.
+
+El informe `docs/resultado-entrenamiento-teclado.md` registra los candidatos aceptados y descartados. Clonar los pesos permite **usar** el aprendizaje sin las fotos; para repetir o ampliar el entrenamiento con los mismos ejemplos hace falta recuperar también el archivo privado del dataset.

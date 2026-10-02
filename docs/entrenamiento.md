@@ -92,3 +92,10 @@ Resultado actual: 4/5 conteos correctos en las fotos cercanas de mouse, con tres
 El usuario añadió dos imágenes y confirmó 13 mouse ordenados y 26 amontonados. Se anotaron y entrenaron dentro de experimento-aula-v2, preservando v1. Aula-mouse-v4 finalizó 70 épocas en ~631 s. Foto por API: 5/5 individuales correctas, 26/26 amontonados, 10/13 ordenados, monitores 6 y 9. Barrido: los mouse parciales ya pueden confirmarse tras tres cuadros; escena de 26 confirma 25, escena de 13 confirma 10. No afirmar que terminó con exactitud universal. Detalle: docs/resultado-mouse-ampliado.md.
 
 Por petición expresa del usuario, los checkpoints seleccionados se incluyen en Git bajo backend/models, con hashes y un lanzador portable. Las fotos/datasets privados y archivos intermedios siguen ignorados; clonar no permite reproducir entrenamiento sin obtener esos datos, pero sí ejecutar inferencia. Flujo real de modelos/arrays explicado en docs/flujo-deteccion.md. Publicación prevista en feature/dataset-feedback, sin fusionar main; comprobar estado Git antes de afirmar publicación.
+
+
+## Teclados, conservación de clases e integración — 01/10/2026
+
+El usuario autorizó integrar en main y publicar código/modelos en github.com/douglasparrales/object-counter-app, sin fotos/videos originales. Se entrenaron v5 y v6; v5 se descartó por fragmentos duplicados. Dataset aula-v4: 31 archivos, tres clases, historial anterior conservado. La selección usa v4 para monitores, fusión v4+v6 para mouse y v6 con Soft-NMS para teclados. El perfil aula-anterior permite recuperar el modelo previo.
+
+Se corrigió el registro de fondos débiles manteniendo objetos enmascarados y las comprobaciones de coincidencia. Foto por API: 1/1/3 teclados, 26/13 mouse, 6/9 monitores; barrido confirma todos esos grupos salvo los mouse densos comprimidos, 25/26. Persisten omisiones importantes en objetos lejanos del video. La calibración final incluye regresiones de imágenes conocidas; no anunciar evaluación independiente ni precisión perfecta. Informe: docs/resultado-entrenamiento-teclado.md. No se generó otra APK.

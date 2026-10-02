@@ -1,0 +1,562 @@
+{
+  "weights": "backend/models/classroom.pt",
+  "weights_sha256": "a9312f25d2c729d3b4244d36b330743cade5ba2aced0137968af385ae8388cb2",
+  "thresholds": {
+    "0": 0.7,
+    "1": 0.55,
+    "2": 0.75
+  },
+  "preserve_previous_monitor": true,
+  "mouse_previous": {
+    "weights": "backend\\models\\classroom-v4.pt",
+    "sha256": "84a8e8537b05d7cec365f04fcc2facd9b68ddc1cad144cfeacea1621683e6b8e",
+    "confidence": 0.85
+  },
+  "automatic_thresholds": {
+    "0": 0.7,
+    "1": 0.15,
+    "2": 0.25
+  },
+  "threshold_selection": "explicit development operating point; known-image regression tuning",
+  "imgsz": 640,
+  "nms_iou": 0.45,
+  "keyboard_soft_nms_sigma": 0.5,
+  "calibration": {
+    "monitor": [
+      [
+        0.15,
+        {
+          "tp": 6,
+          "fp": 1,
+          "fn": 1,
+          "precision": 0.8571428571428571,
+          "recall": 0.8571428571428571,
+          "f1": 0.8571428571428571,
+          "count_mae": 0.6666666666666666,
+          "exact_count": 1,
+          "images": 3
+        }
+      ],
+      [
+        0.25,
+        {
+          "tp": 6,
+          "fp": 1,
+          "fn": 1,
+          "precision": 0.8571428571428571,
+          "recall": 0.8571428571428571,
+          "f1": 0.8571428571428571,
+          "count_mae": 0.6666666666666666,
+          "exact_count": 1,
+          "images": 3
+        }
+      ],
+      [
+        0.35,
+        {
+          "tp": 6,
+          "fp": 0,
+          "fn": 1,
+          "precision": 1.0,
+          "recall": 0.8571428571428571,
+          "f1": 0.9230769230769231,
+          "count_mae": 0.3333333333333333,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.45,
+        {
+          "tp": 6,
+          "fp": 0,
+          "fn": 1,
+          "precision": 1.0,
+          "recall": 0.8571428571428571,
+          "f1": 0.9230769230769231,
+          "count_mae": 0.3333333333333333,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.55,
+        {
+          "tp": 6,
+          "fp": 0,
+          "fn": 1,
+          "precision": 1.0,
+          "recall": 0.8571428571428571,
+          "f1": 0.9230769230769231,
+          "count_mae": 0.3333333333333333,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.65,
+        {
+          "tp": 6,
+          "fp": 0,
+          "fn": 1,
+          "precision": 1.0,
+          "recall": 0.8571428571428571,
+          "f1": 0.9230769230769231,
+          "count_mae": 0.3333333333333333,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.7,
+        {
+          "tp": 6,
+          "fp": 0,
+          "fn": 1,
+          "precision": 1.0,
+          "recall": 0.8571428571428571,
+          "f1": 0.9230769230769231,
+          "count_mae": 0.3333333333333333,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.75,
+        {
+          "tp": 5,
+          "fp": 0,
+          "fn": 2,
+          "precision": 1.0,
+          "recall": 0.7142857142857143,
+          "f1": 0.8333333333333334,
+          "count_mae": 0.6666666666666666,
+          "exact_count": 1,
+          "images": 3
+        }
+      ],
+      [
+        0.85,
+        {
+          "tp": 5,
+          "fp": 0,
+          "fn": 2,
+          "precision": 1.0,
+          "recall": 0.7142857142857143,
+          "f1": 0.8333333333333334,
+          "count_mae": 0.6666666666666666,
+          "exact_count": 1,
+          "images": 3
+        }
+      ]
+    ],
+    "mouse": [
+      [
+        0.15,
+        {
+          "tp": 2,
+          "fp": 0,
+          "fn": 2,
+          "precision": 1.0,
+          "recall": 0.5,
+          "f1": 0.6666666666666666,
+          "count_mae": 0.6666666666666666,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.25,
+        {
+          "tp": 1,
+          "fp": 0,
+          "fn": 3,
+          "precision": 1.0,
+          "recall": 0.25,
+          "f1": 0.4,
+          "count_mae": 1.0,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.35,
+        {
+          "tp": 1,
+          "fp": 0,
+          "fn": 3,
+          "precision": 1.0,
+          "recall": 0.25,
+          "f1": 0.4,
+          "count_mae": 1.0,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.45,
+        {
+          "tp": 1,
+          "fp": 0,
+          "fn": 3,
+          "precision": 1.0,
+          "recall": 0.25,
+          "f1": 0.4,
+          "count_mae": 1.0,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.55,
+        {
+          "tp": 1,
+          "fp": 0,
+          "fn": 3,
+          "precision": 1.0,
+          "recall": 0.25,
+          "f1": 0.4,
+          "count_mae": 1.0,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.65,
+        {
+          "tp": 1,
+          "fp": 0,
+          "fn": 3,
+          "precision": 1.0,
+          "recall": 0.25,
+          "f1": 0.4,
+          "count_mae": 1.0,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.7,
+        {
+          "tp": 1,
+          "fp": 0,
+          "fn": 3,
+          "precision": 1.0,
+          "recall": 0.25,
+          "f1": 0.4,
+          "count_mae": 1.0,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.75,
+        {
+          "tp": 1,
+          "fp": 0,
+          "fn": 3,
+          "precision": 1.0,
+          "recall": 0.25,
+          "f1": 0.4,
+          "count_mae": 1.0,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.85,
+        {
+          "tp": 1,
+          "fp": 0,
+          "fn": 3,
+          "precision": 1.0,
+          "recall": 0.25,
+          "f1": 0.4,
+          "count_mae": 1.0,
+          "exact_count": 2,
+          "images": 3
+        }
+      ]
+    ],
+    "keyboard": [
+      [
+        0.15,
+        {
+          "tp": 4,
+          "fp": 4,
+          "fn": 2,
+          "precision": 0.5,
+          "recall": 0.6666666666666666,
+          "f1": 0.5714285714285714,
+          "count_mae": 0.6666666666666666,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.25,
+        {
+          "tp": 4,
+          "fp": 2,
+          "fn": 2,
+          "precision": 0.6666666666666666,
+          "recall": 0.6666666666666666,
+          "f1": 0.6666666666666666,
+          "count_mae": 0.0,
+          "exact_count": 3,
+          "images": 3
+        }
+      ],
+      [
+        0.35,
+        {
+          "tp": 3,
+          "fp": 2,
+          "fn": 3,
+          "precision": 0.6,
+          "recall": 0.5,
+          "f1": 0.5454545454545454,
+          "count_mae": 0.3333333333333333,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.45,
+        {
+          "tp": 3,
+          "fp": 1,
+          "fn": 3,
+          "precision": 0.75,
+          "recall": 0.5,
+          "f1": 0.6,
+          "count_mae": 0.6666666666666666,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.55,
+        {
+          "tp": 3,
+          "fp": 1,
+          "fn": 3,
+          "precision": 0.75,
+          "recall": 0.5,
+          "f1": 0.6,
+          "count_mae": 0.6666666666666666,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.65,
+        {
+          "tp": 2,
+          "fp": 1,
+          "fn": 4,
+          "precision": 0.6666666666666666,
+          "recall": 0.3333333333333333,
+          "f1": 0.4444444444444444,
+          "count_mae": 1.0,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.7,
+        {
+          "tp": 1,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1.0,
+          "recall": 0.16666666666666666,
+          "f1": 0.2857142857142857,
+          "count_mae": 1.6666666666666667,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.75,
+        {
+          "tp": 1,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1.0,
+          "recall": 0.16666666666666666,
+          "f1": 0.2857142857142857,
+          "count_mae": 1.6666666666666667,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.85,
+        {
+          "tp": 1,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1.0,
+          "recall": 0.16666666666666666,
+          "f1": 0.2857142857142857,
+          "count_mae": 1.6666666666666667,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.9,
+        {
+          "tp": 1,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1.0,
+          "recall": 0.16666666666666666,
+          "f1": 0.2857142857142857,
+          "count_mae": 1.6666666666666667,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.95,
+        {
+          "tp": 1,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1.0,
+          "recall": 0.16666666666666666,
+          "f1": 0.2857142857142857,
+          "count_mae": 1.6666666666666667,
+          "exact_count": 2,
+          "images": 3
+        }
+      ],
+      [
+        0.99,
+        {
+          "tp": 1,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1.0,
+          "recall": 0.16666666666666666,
+          "f1": 0.2857142857142857,
+          "count_mae": 1.6666666666666667,
+          "exact_count": 2,
+          "images": 3
+        }
+      ]
+    ]
+  },
+  "summary": {
+    "train": {
+      "monitor": {
+        "tp": 31,
+        "fp": 1,
+        "fn": 0,
+        "precision": 0.96875,
+        "recall": 1.0,
+        "f1": 0.9841269841269841,
+        "count_mae": 0.043478260869565216,
+        "exact_count": 22,
+        "images": 23
+      },
+      "mouse": {
+        "tp": 56,
+        "fp": 2,
+        "fn": 1,
+        "precision": 0.9655172413793104,
+        "recall": 0.9824561403508771,
+        "f1": 0.9739130434782609,
+        "count_mae": 0.043478260869565216,
+        "exact_count": 22,
+        "images": 23
+      },
+      "keyboard": {
+        "tp": 25,
+        "fp": 1,
+        "fn": 11,
+        "precision": 0.9615384615384616,
+        "recall": 0.6944444444444444,
+        "f1": 0.8064516129032258,
+        "count_mae": 0.43478260869565216,
+        "exact_count": 18,
+        "images": 23
+      }
+    },
+    "val": {
+      "monitor": {
+        "tp": 6,
+        "fp": 0,
+        "fn": 1,
+        "precision": 1.0,
+        "recall": 0.8571428571428571,
+        "f1": 0.9230769230769231,
+        "count_mae": 0.3333333333333333,
+        "exact_count": 2,
+        "images": 3
+      },
+      "mouse": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 3,
+        "precision": 1.0,
+        "recall": 0.25,
+        "f1": 0.4,
+        "count_mae": 1.0,
+        "exact_count": 2,
+        "images": 3
+      },
+      "keyboard": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 5,
+        "precision": 1.0,
+        "recall": 0.16666666666666666,
+        "f1": 0.2857142857142857,
+        "count_mae": 1.6666666666666667,
+        "exact_count": 2,
+        "images": 3
+      }
+    },
+    "test": {
+      "monitor": {
+        "tp": 10,
+        "fp": 1,
+        "fn": 13,
+        "precision": 0.9090909090909091,
+        "recall": 0.43478260869565216,
+        "f1": 0.5882352941176471,
+        "count_mae": 2.4,
+        "exact_count": 1,
+        "images": 5
+      },
+      "mouse": {
+        "tp": 3,
+        "fp": 3,
+        "fn": 3,
+        "precision": 0.5,
+        "recall": 0.5,
+        "f1": 0.5,
+        "count_mae": 1.2,
+        "exact_count": 2,
+        "images": 5
+      },
+      "keyboard": {
+        "tp": 0,
+        "fp": 2,
+        "fn": 16,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "count_mae": 2.8,
+        "exact_count": 1,
+        "images": 5
+      }
+    }
+  },
+  "limitation": "Related scenes and same mouse specimens; not an independent benchmark. Video mouse labels are provisional. Postprocessing is recorded explicitly; optional keyboard Gaussian Soft-NMS.",
+  "dataset_version": "experimento-aula-v4",
+  "independent_benchmark": false
+}

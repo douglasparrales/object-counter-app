@@ -23,6 +23,24 @@ class SurfaceScanTests(unittest.TestCase):
         self.seq += 1
         return result
 
+    def test_low_contrast_background_registers_without_using_object_texture(self):
+        image=Image.fromarray((self.scene[:,:700].astype(np.float32)/4+96).astype(np.uint8))
+        boxes=[dict(cx=.5,cy=.5,w=.4,h=.4)]
+        self.scan.process(image,boxes,0)
+        result=self.scan.process(image,boxes,1)
+        self.assertEqual(result['estado'],'SIGUIENDO')
+        self.assertEqual(result['total'],1)
+
+    def test_object_texture_alone_cannot_establish_registration(self):
+        rgb=np.full((600,700,3),128,dtype=np.uint8)
+        rgb[100:500,100:600]=self.scene[100:500,100:600]
+        image=Image.fromarray(rgb)
+        boxes=[dict(cx=.5,cy=.5,w=520/700,h=420/600)]
+        for sequence in range(4):
+            result=self.scan.process(image,boxes,sequence)
+            self.assertEqual(result['estado'],'SIN_COINCIDENCIA')
+            self.assertEqual(result['total'],0)
+
     def test_leave_view_and_return_keeps_two_ids(self):
         self.assertEqual(self.frame(0, [200, 900])['total'], 0)
         self.assertEqual(self.frame(0, [200, 900])['total'], 1)

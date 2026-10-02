@@ -64,6 +64,11 @@ contador_aula = ClassroomCounter(
     classroom_weights,
     monitor_confidence=float(os.environ.get('CLASSROOM_MONITOR_CONFIDENCE', '0.7')),
     mouse_confidence=float(os.environ.get('CLASSROOM_MOUSE_CONFIDENCE', '0.7')),
+    keyboard_confidence=float(os.environ.get('CLASSROOM_KEYBOARD_CONFIDENCE', '0.5')),
+    mouse_previous_weights=os.environ.get('CLASSROOM_MOUSE_PREVIOUS_PATH') or None,
+    preserve_previous_monitor=os.environ.get('CLASSROOM_PRESERVE_PREVIOUS_MONITOR')=='1',
+    mouse_previous_confidence=float(os.environ.get('CLASSROOM_MOUSE_PREVIOUS_CONFIDENCE','0.85')),
+    keyboard_soft_nms_sigma=float(os.environ['CLASSROOM_KEYBOARD_SOFT_NMS_SIGMA']) if os.environ.get('CLASSROOM_KEYBOARD_SOFT_NMS_SIGMA') else None,
 ) if classroom_weights else None
 clases_activas: tuple[str, ...] | None = None
 referencias_visuales: dict[str, dict] = {}
@@ -406,7 +411,7 @@ async def detect(
     # A dark reference must not turn background patches into equipment.
     usar_monitor = contador_monitor is not None and monitor_requested(clase, referencia_registro)
     objetivo_aula = classroom_target(clase, referencia_registro) if contador_aula is not None else None
-    usar_aula = objetivo_aula is not None
+    usar_aula = contador_aula is not None and contador_aula.supports(clase, referencia_registro)
     if dispositivo or usar_monitor or usar_aula:
         perfil_apariencia = None
         usar_similitud = False

@@ -170,6 +170,7 @@ yolov8n_saved_model/
 # Small inference checkpoints needed by a fresh clone (not training runs).
 !/backend/models/monitor-v3.pt
 !/backend/models/classroom.pt
+!/backend/models/classroom-v4.pt
 *.onnx
 backend/mobileclip2_b.ts
 calibration_image_sample*

@@ -14,6 +14,30 @@
     "aula": {
       "kind": "classroom",
       "file": "classroom.pt",
+      "sha256": "a9312f25d2c729d3b4244d36b330743cade5ba2aced0137968af385ae8388cb2",
+      "thresholds": {
+        "0": 0.7,
+        "1": 0.55,
+        "2": 0.75
+      },
+      "keyboard_soft_nms_sigma": 0.5,
+      "mouse_previous": {
+        "file": "classroom-v4.pt",
+        "sha256": "84a8e8537b05d7cec365f04fcc2facd9b68ddc1cad144cfeacea1621683e6b8e",
+        "confidence": 0.85
+      },
+      "imgsz": 640,
+      "nms_iou": 0.45,
+      "run": "aula-keyboard-v6",
+      "dataset_version": "experimento-aula-v4",
+      "status": "experimental; development images and API replay; independent room validation pending",
+      "threshold_selection": "development operating point; includes known-image regression tuning",
+      "report": "docs/resultado-entrenamiento-teclado.md",
+      "preserve_previous_monitor": true
+    },
+    "aula-anterior": {
+      "kind": "classroom",
+      "file": "classroom-v4.pt",
       "sha256": "84a8e8537b05d7cec365f04fcc2facd9b68ddc1cad144cfeacea1621683e6b8e",
       "thresholds": {
         "0": 0.7,

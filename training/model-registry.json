@@ -30,13 +30,26 @@
     },
     {
       "id": "aula-mouse-v4",
-      "path": "backend/models/classroom.pt",
+      "path": "backend/models/classroom-v4.pt",
       "sha256": "84a8e8537b05d7cec365f04fcc2facd9b68ddc1cad144cfeacea1621683e6b8e",
-      "status": "experimental-included-for-cloning"
+      "status": "preserved-and-used-for-mouse-fusion"
+    },
+    {
+      "id": "aula-keyboard-v5",
+      "path": "media-entrenamiento/experimento-aula-v3/runs/aula-keyboard-v5/weights/best.pt",
+      "sha256": "413f891b6282ffe609f0971f1e4d81480b5c2e0870a0902fe7297e19bcdb459c",
+      "status": "rejected-keyboard-fragment-duplicates"
+    },
+    {
+      "id": "aula-keyboard-v6",
+      "path": "backend/models/classroom.pt",
+      "sha256": "a9312f25d2c729d3b4244d36b330743cade5ba2aced0137968af385ae8388cb2",
+      "status": "experimental-three-classes-with-preserved-mouse-fusion"
     }
   ],
-  "candidate_evaluation": "media-entrenamiento/experimento-aula-v2/candidate-v4/evaluation.json",
-  "candidate_api_results": "media-entrenamiento/experimento-aula-v2/api-v4/results.json",
+  "candidate_evaluation": "media-entrenamiento/experimento-aula-v4/evaluation-distributed/evaluation.json",
+  "candidate_api_results": "media-entrenamiento/experimento-aula-v4/clone-api-final/results.json",
   "continuity": "docs/como-se-guarda-el-aprendizaje.md",
-  "limitation": "Selected inference weights are tracked under backend/models; private datasets and intermediate checkpoints remain gitignored."
+  "limitation": "Selected inference weights are tracked under backend/models; private datasets and intermediate checkpoints remain gitignored.",
+  "launcher_default": "aula"
 }

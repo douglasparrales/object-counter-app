@@ -33,6 +33,7 @@ class SurfaceScan:
         self.sequence = -1
         self.last_response = None
         self.features = cv2.SIFT_create(nfeatures=1600)
+        self.background_features = cv2.SIFT_create(nfeatures=0, contrastThreshold=0.01)
         self.keys = []
         self.latest = None
         self.landmarks = []
@@ -102,6 +103,15 @@ class SurfaceScan:
                 cv2.rectangle(mask, (int(x-bw/2-4), int(y-bh/2-4)),
                               (int(x+bw/2+4), int(y+bh/2+4)), 0, -1)
             kp, desc = self.features.detectAndCompute(gray, mask)
+            if len(kp) < 40:
+                # Dense detections can consume SIFT's global feature budget before
+                # OpenCV applies the mask. Retry on weaker background details, then
+                # cap descriptors AFTER masking. Objects remain excluded and the
+                # same 40-point / 18-inlier registration checks still apply.
+                kp, desc = self.background_features.detectAndCompute(gray, mask)
+                if len(kp) > 1600:
+                    chosen = sorted(range(len(kp)), key=lambda i: -kp[i].response)[:1600]
+                    kp, desc = [kp[i] for i in chosen], desc[chosen]
             points = np.float32([p.pt for p in kp])
             status, world, matches, error = 'SIN_COINCIDENCIA', None, 0, None
             if desc is not None and len(kp) >= 40:

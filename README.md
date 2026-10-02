@@ -91,12 +91,16 @@ Si se trabaja sin Internet, ambos archivos deben colocarse previamente dentro de
 Los pesos personalizados incluidos en `backend/models/` ya contienen el aprendizaje; no es necesario descargar `media-entrenamiento/` ni entrenar de nuevo para usarlos. Desde la raíz, con el entorno del backend activado:
 
 ```powershell
-python training/serve_backend.py --profile monitores --host 0.0.0.0 --port 8000
+python training/serve_backend.py --profile aula --host 0.0.0.0 --port 8000
 ```
 
-`--profile original` conserva las rutas originales; `--profile aula` selecciona el candidato conjunto monitor + mouse y sus umbrales guardados. Ambos perfiles personalizados son experimentales: consultar sus resultados antes de usarlos para conteos sin supervisión. `--check` verifica los pesos incluidos sin iniciar el servidor. El lanzador usa el Python actual, rutas relativas al repositorio y no depende del entorno local del autor.
+`--profile aula` es el perfil predeterminado del lanzador y habilita monitor, mouse y teclado. Para mouse combina el modelo nuevo con el anterior y descarta cajas repetidas; monitor conserva el anterior y teclado usa el nuevo. `--profile aula-anterior` conserva el detector previo de monitor + mouse; `--profile monitores` conserva monitores v3; `--profile original` activa las rutas originales. `--check` verifica todos los checkpoints del perfil sin iniciar el servidor.
 
-El perfil `monitores` conserva la versión anterior, y `aula` permite probar el entrenamiento ampliado sin sobrescribirla. Detener el servidor y arrancar el otro perfil cambia la versión; no hace falta reinstalar la APK. Para comprender cómo se elige entre YOLOv8n, World y los personalizados, véase [flujo de detección y datasets](docs/flujo-deteccion.md).
+En la app escribe **monitor**, **mouse** o **teclado**, nunca aula. Si ya tienes la APK instalada, basta actualizar e iniciar este backend y configurar su dirección: no necesitas compilar ni reinstalar la app. Las secciones de Android siguientes son para quien necesite generar una APK.
+
+Son perfiles experimentales, con resultados y límites publicados en [entrenamiento de teclados](docs/resultado-entrenamiento-teclado.md). El flujo de foto y el barrido usan los mismos detectores; acertar estas imágenes conocidas no garantiza reconocer todo en una clase nueva. El lanzador usa el Python activo y los pesos incluidos, sin depender del dataset privado ni de rutas del autor. Ejecutar `uvicorn main:app` directamente sin configurar variables conserva el comportamiento original: usa el lanzador para activar el entrenamiento.
+
+Para entender cómo se elige entre YOLOv8n, World y los personalizados, consulta [flujo de detección y datasets](docs/flujo-deteccion.md).
 
 ### 3. Configurar la dirección del backend
 
@@ -154,13 +158,13 @@ Con el entorno activado:
 cd backend
 .\.venv\Scripts\Activate.ps1
 cd ..
-python training/serve_backend.py --profile monitores --host 0.0.0.0 --port 8000
+python training/serve_backend.py --profile aula --host 0.0.0.0 --port 8000
 ```
 
 Sin activar el entorno:
 
 ```powershell
-.\backend\.venv\Scripts\python.exe training/serve_backend.py --profile monitores --host 0.0.0.0 --port 8000
+.\backend\.venv\Scripts\python.exe training/serve_backend.py --profile aula --host 0.0.0.0 --port 8000
 ```
 
 En macOS/Linux:
@@ -169,7 +173,7 @@ En macOS/Linux:
 cd backend
 source .venv/bin/activate
 cd ..
-python training/serve_backend.py --profile monitores --host 0.0.0.0 --port 8000
+python training/serve_backend.py --profile aula --host 0.0.0.0 --port 8000
 ```
 
 El lanzador establece el directorio correcto del backend. Cambia `monitores` por `aula` para probar el candidato conjunto o por `original` para las rutas anteriores. En el computador se puede comprobar FastAPI en:
