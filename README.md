@@ -262,20 +262,6 @@ SQLite almacena las sesiones guardadas, resultados y eventos de auditoría. Las 
 
 La app necesita validar precisión con equipos reales y distintas condiciones, mejorar el seguimiento entre profundidades, desplegar un backend seguro y estable, definir respaldo y privacidad de los datos y completar pruebas de rendimiento, recuperación de errores y distribución firmada.
 
-## Obtener una APK de instalación directa
-
-**El repositorio no incluye ninguna APK.** La carpeta `artifacts/` está ignorada por Git y solo existe en la máquina donde se guardaron los archivos de compilación. Al clonar no encontrarás `artifacts/release/app-release.apk` ni el archivo comprimido usado durante las pruebas.
-
-Para instalar una APK release, necesitas recibirla de quien haya generado el build o descargarla desde un build de EAS al que tengas acceso. Si necesitas generar una nueva, el perfil `preview` está definido en [eas.json](object-counter-app/eas.json). Con EAS CLI instalado y una cuenta con acceso al proyecto, ejecuta desde la carpeta móvil `object-counter-app/`:
-
-```powershell
-eas build --platform android --profile preview
-```
-
-Al terminar, descarga el artefacto desde el enlace del build. El perfil solicita `buildType: apk` y selecciona `android/app/build/outputs/apk/release/app-release.apk`; esa ruta corresponde a la salida de compilación, no a un archivo incluido en Git. No se ejecutó un nuevo build de EAS para comprobar esa entrega remota.
-
-Si recibes un `.tar.gz`, extrae su contenido y busca el `.apk`; cambiar la extensión del comprimido no lo convierte en una APK. La APK recuperada durante las pruebas fue un archivo local, no una descarga publicada en este repositorio.
-
 ## Modelos incluidos y datos privados de entrenamiento
 
 Los cambios de entrenamiento de `feature/dataset-feedback` ya están integrados en `main`. Los modelos seleccionados están en `backend/models/` y sí se descargan al clonar; contienen lo aprendido para ejecutar el conteo sin disponer de las fotos originales. Se ejecutan en el backend, no dentro de la APK.
