@@ -37,7 +37,6 @@ export type ResultadoIdentificacion = {
 };
 
 const INTERVAL_MS = 400;
-const MAX_BOX_AGE_MS = 5000;
 const BOX_VISIBLE_MS = 3000;
 export function useDetection() {
   const [cajasGuardadas, setCajasGuardadas] = useState<CajaGuardada[]>([]);
@@ -111,7 +110,6 @@ export function useDetection() {
           if (!isRunning.current || turno !== generacion.current) { void cerrarBarrido(creada); return; }
           sesionRef.current = creada;
         }
-        const capturedAt = Date.now();
         const photo = await cameraRef.current.takePhoto();
         const uri = `file://${photo.path}`;
         archivos.push(uri);
@@ -124,16 +122,14 @@ export function useDetection() {
         if (!isRunning.current || turno !== generacion.current) return;
         totalRef.current = resultado.total;
         setTotalContado(resultado.total);
-        // Keep the inventory, but never leave old positions over a live camera
-        // while a slow request is pending or after its late response arrives.
+        // The positions belong to this analyzed frame. Show them briefly after
+        // the backend response so slow camera capture and inference do not
+        // discard the visual feedback before it reaches the preview.
         if (boxesExpiryRef.current) clearTimeout(boxesExpiryRef.current);
-        const remaining = Math.min(BOX_VISIBLE_MS, MAX_BOX_AGE_MS - (Date.now() - capturedAt));
-        setCajasGuardadas(remaining > 0 ? resultado.objetos : []);
-        if (remaining > 0) {
-          boxesExpiryRef.current = setTimeout(() => {
-            if (isRunning.current && turno === generacion.current) setCajasGuardadas([]);
-          }, remaining);
-        }
+        setCajasGuardadas(resultado.objetos);
+        boxesExpiryRef.current = setTimeout(() => {
+          if (isRunning.current && turno === generacion.current) setCajasGuardadas([]);
+        }, BOX_VISIBLE_MS);
         setEstadoBarrido(resultado.estado === 'SIN_COINCIDENCIA'
           ? 'Total conservado · vuelve a una zona ya vista y avanza con más solapamiento'
           : resultado.estado === 'INICIANDO' ? 'Mantén la cámara quieta para confirmar los primeros objetos'
