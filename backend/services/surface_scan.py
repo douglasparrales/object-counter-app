@@ -171,7 +171,7 @@ class SurfaceScan:
                             landmark.hits += 1
                     else:
                         idx = len(self.landmarks)
-                        landmark = Landmark(center, radius, footprint, required_hits=2 if full else 3)
+                        landmark = Landmark(center, radius, footprint, required_hits=1 if full else 3)
                         self.landmarks.append(landmark)
                     used.add(idx)
                     landmark.last_sequence = sequence
