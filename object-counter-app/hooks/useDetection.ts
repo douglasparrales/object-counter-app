@@ -36,7 +36,7 @@ export type ResultadoIdentificacion = {
   referenciaId: string | null;
 };
 
-const INTERVAL_MS = 400;
+const INTERVAL_MS = 200;
 const BOX_VISIBLE_MS = 3000;
 export function useDetection() {
   const [cajasGuardadas, setCajasGuardadas] = useState<CajaGuardada[]>([]);
